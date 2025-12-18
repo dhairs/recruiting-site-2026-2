@@ -423,6 +423,75 @@ export async function updateInterviewOfferStatus(
   const updatedOffers = [...offers];
   updatedOffers[offerIndex] = updatedOffer;
 
+
   return updateApplication(applicationId, { interviewOffers: updatedOffers });
+}
+
+/**
+ * Get ALL applications (for Admin)
+ */
+export async function getAllApplications(): Promise<Application[]> {
+  const snapshot = await adminDb.collection(APPLICATIONS_COLLECTION).get();
+
+  return snapshot.docs.map((doc) => {
+    const data = doc.data();
+    return {
+      ...data,
+      id: doc.id,
+      createdAt: data.createdAt?.toDate() || new Date(),
+      updatedAt: data.updatedAt?.toDate() || new Date(),
+      submittedAt: data.submittedAt?.toDate(),
+      interviewOffers: normalizeInterviewOffers(data.interviewOffers),
+    } as Application;
+  });
+}
+
+/**
+ * Get applications for a specific Team (for Team Captain)
+ */
+export async function getTeamApplications(team: Team): Promise<Application[]> {
+  const snapshot = await adminDb
+    .collection(APPLICATIONS_COLLECTION)
+    .where("team", "==", team)
+    .get();
+
+  return snapshot.docs.map((doc) => {
+    const data = doc.data();
+    return {
+      ...data,
+      id: doc.id,
+      createdAt: data.createdAt?.toDate() || new Date(),
+      updatedAt: data.updatedAt?.toDate() || new Date(),
+      submittedAt: data.submittedAt?.toDate(),
+      interviewOffers: normalizeInterviewOffers(data.interviewOffers),
+    } as Application;
+  });
+}
+
+/**
+ * Get applications for a specific System (for System Lead/Reviewer)
+ * Filters by preferredSystem.
+ */
+export async function getSystemApplications(
+  team: Team,
+  system: string
+): Promise<Application[]> {
+  const snapshot = await adminDb
+    .collection(APPLICATIONS_COLLECTION)
+    .where("team", "==", team)
+    .where("preferredSystem", "==", system)
+    .get();
+
+  return snapshot.docs.map((doc) => {
+    const data = doc.data();
+    return {
+      ...data,
+      id: doc.id,
+      createdAt: data.createdAt?.toDate() || new Date(),
+      updatedAt: data.updatedAt?.toDate() || new Date(),
+      submittedAt: data.submittedAt?.toDate(),
+      interviewOffers: normalizeInterviewOffers(data.interviewOffers),
+    } as Application;
+  });
 }
 

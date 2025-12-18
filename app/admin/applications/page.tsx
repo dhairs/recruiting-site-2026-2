@@ -1,0 +1,612 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { Application, ApplicationStatus } from "@/lib/models/Application";
+import { User } from "@/lib/models/User";
+import { TEAM_INFO } from "@/lib/models/teamQuestions";
+import { Note, ReviewTask } from "@/lib/models/ApplicationExtras";
+import { ScorecardConfig, ScorecardSubmission } from "@/lib/models/Scorecard";
+import { format } from "date-fns";
+import { 
+  Search, 
+  Mail, 
+  Edit, 
+  CheckCircle, 
+  XCircle, 
+  Clock, 
+  FileText,
+  MessageSquare,
+  Plus
+} from "lucide-react";
+import clsx from "clsx";
+
+interface ApplicationWithUser extends Application {
+  user: User;
+}
+
+/**
+ * Status Badge Component
+ */
+function StatusBadge({ status }: { status: ApplicationStatus }) {
+  const styles = {
+    [ApplicationStatus.IN_PROGRESS]: "bg-yellow-500/10 text-yellow-400 border-yellow-500/20",
+    [ApplicationStatus.SUBMITTED]: "bg-blue-500/10 text-blue-400 border-blue-500/20",
+    [ApplicationStatus.UNDER_REVIEW]: "bg-purple-500/10 text-purple-400 border-purple-500/20",
+    [ApplicationStatus.INTERVIEW]: "bg-cyan-500/10 text-cyan-400 border-cyan-500/20",
+    [ApplicationStatus.ACCEPTED]: "bg-green-500/10 text-green-400 border-green-500/20",
+    [ApplicationStatus.REJECTED]: "bg-red-500/10 text-red-500 border-red-500/20",
+  };
+
+  return (
+    <span className={clsx("px-2.5 py-0.5 text-xs font-medium rounded-full border", styles[status])}>
+      {status.replace("_", " ").toUpperCase()}
+    </span>
+  );
+}
+
+export default function AdminApplicationsPage() {
+  const [applications, setApplications] = useState<ApplicationWithUser[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedAppId, setSelectedAppId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<"application" | "resume" | "scorecard">("application");
+  const [searchTerm, setSearchTerm] = useState("");
+
+  // Extras State
+  const [notes, setNotes] = useState<Note[]>([]);
+  const [tasks, setTasks] = useState<ReviewTask[]>([]);
+  const [newNote, setNewNote] = useState("");
+  const [sendingNote, setSendingNote] = useState(false);
+  const [statusLoading, setStatusLoading] = useState(false);
+
+  // Scorecard State
+  const [scorecardConfig, setScorecardConfig] = useState<ScorecardConfig | null>(null);
+  const [scorecardData, setScorecardData] = useState<Record<string, any>>({});
+  const [scorecardLoading, setScorecardLoading] = useState(false);
+  const [scorecardSaving, setScorecardSaving] = useState(false);
+
+  useEffect(() => {
+    async function fetchApps() {
+      try {
+        const res = await fetch("/api/admin/applications");
+        if (res.ok) {
+          const data = await res.json();
+          setApplications(data.applications || []);
+          if (data.applications?.length > 0) {
+            setSelectedAppId(data.applications[0].id);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to fetch applications", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchApps();
+  }, []);
+
+  const selectedApp = applications.find(app => app.id === selectedAppId);
+
+  // Fetch extras when selected app changes
+  useEffect(() => {
+    if (!selectedAppId) return;
+
+    // Fetch Notes and Tasks
+    fetch(`/api/admin/applications/${selectedAppId}/notes`)
+      .then(res => res.json())
+      .then(data => setNotes(data.notes || []));
+
+    fetch(`/api/admin/applications/${selectedAppId}/tasks`)
+      .then(res => res.json())
+      .then(data => setTasks(data.tasks || []));
+
+    // Reset scorecard state
+    setScorecardConfig(null);
+    setScorecardData({});
+  }, [selectedAppId]);
+
+  // Fetch Scorecard Config only when tab is active
+  useEffect(() => {
+    if (activeTab === "scorecard" && selectedAppId) {
+        setScorecardLoading(true);
+        fetch(`/api/admin/applications/${selectedAppId}/scorecard`)
+            .then(res => res.json())
+            .then(data => {
+                setScorecardConfig(data.config);
+                if (data.submission) {
+                    setScorecardData(data.submission.data);
+                }
+            })
+            .finally(() => setScorecardLoading(false));
+    }
+  }, [activeTab, selectedAppId]);
+
+
+  const handleStatusUpdate = async (status: ApplicationStatus) => {
+    if (!selectedAppId) return;
+    setStatusLoading(true);
+    try {
+        const res = await fetch(`/api/admin/applications/${selectedAppId}/status`, {
+            method: "POST",
+            body: JSON.stringify({ status }),
+        });
+        if (res.ok) {
+            // Update local state
+            setApplications(prev => prev.map(a => a.id === selectedAppId ? { ...a, status } : a));
+        }
+    } catch (e) {
+        console.error("Failed to update status", e);
+    } finally {
+        setStatusLoading(false);
+    }
+  };
+
+  const handleAddNote = async () => {
+    if (!selectedAppId || !newNote.trim()) return;
+    setSendingNote(true);
+    try {
+        const res = await fetch(`/api/admin/applications/${selectedAppId}/notes`, {
+            method: "POST",
+            body: JSON.stringify({ content: newNote }),
+        });
+        if (res.ok) {
+            const data = await res.json();
+            setNotes(prev => [data.note, ...prev]);
+            setNewNote("");
+        }
+    } finally {
+        setSendingNote(false);
+    }
+  };
+
+  const handleAddTask = async () => {
+     if (!selectedAppId) return;
+     const description = prompt("Enter task description:");
+     if (!description) return;
+
+     const res = await fetch(`/api/admin/applications/${selectedAppId}/tasks`, {
+         method: "POST",
+         body: JSON.stringify({ description }),
+     });
+     if (res.ok) {
+         const data = await res.json();
+         setTasks(prev => [...prev, data.task]);
+     }
+  };
+
+  const handleToggleTask = async (taskId: string, isCompleted: boolean) => {
+    if (!selectedAppId) return;
+    // Optimistic update
+    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, isCompleted, completedAt: isCompleted ? new Date() : undefined } : t));
+    
+    await fetch(`/api/admin/applications/${selectedAppId}/tasks/${taskId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ isCompleted }),
+    });
+  };
+
+  const handleScorecardSubmit = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!selectedAppId) return;
+      setScorecardSaving(true);
+      try {
+          await fetch(`/api/admin/applications/${selectedAppId}/scorecard`, {
+              method: "POST",
+              body: JSON.stringify({ data: scorecardData }),
+          });
+          alert("Scorecard saved!");
+      } finally {
+          setScorecardSaving(false);
+      }
+  };
+
+  const filteredApplications = applications.filter(app => 
+    app.user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    app.user.email.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const getTeamInfo = (teamName: string) => TEAM_INFO.find(t => t.team === teamName);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center p-12 text-neutral-500 h-full">
+        <div className="animate-spin h-8 w-8 border-2 border-orange-500 border-t-transparent rounded-full mr-3"></div>
+        Loading applications...
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-[calc(100vh-64px)] bg-neutral-950 overflow-hidden">
+      {/* Left Sidebar: Applicant List */}
+      <aside className="w-80 flex-shrink-0 border-r border-white/5 flex flex-col bg-neutral-900/30">
+        <div className="p-4 border-b border-white/5">
+          <div className="text-sm font-medium text-neutral-400 mb-2">Applicants</div>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-neutral-500" />
+            <input 
+              type="text" 
+              placeholder="Filter by name..." 
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full bg-neutral-900 border border-white/10 rounded-md py-2 pl-9 pr-3 text-sm text-white placeholder:text-neutral-600 focus:outline-none focus:border-orange-500/50"
+            />
+          </div>
+        </div>
+        
+        <div className="flex-1 overflow-y-auto">
+           {filteredApplications.map(app => (
+             <div 
+               key={app.id}
+               onClick={() => setSelectedAppId(app.id)}
+               className={clsx(
+                 "p-4 border-b border-white/5 cursor-pointer hover:bg-neutral-800/50 transition-colors",
+                 selectedAppId === app.id ? "bg-orange-500/5 border-l-2 border-l-orange-500" : "border-l-2 border-l-transparent"
+               )}
+             >
+                <div className="flex justify-between items-start mb-1">
+                  <h3 className={clsx("font-medium text-sm truncate pr-2", selectedAppId === app.id ? "text-white" : "text-neutral-300")}>
+                    {app.user.name || "Unknown Applicant"}
+                  </h3>
+                  <span className="text-xs text-neutral-500 whitespace-nowrap">{format(new Date(app.createdAt), "MMM d")}</span>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-neutral-400 mb-2">
+                  <span className={clsx(app.team === "Electric" && "text-yellow-500", app.team === "Solar" && "text-blue-500", app.team === "Combustion" && "text-red-500")}>
+                    {app.team}
+                  </span>
+                  <span>•</span>
+                  <span>{app.preferredSystem || "General"}</span>
+                </div>
+                <StatusBadge status={app.status} />
+             </div>
+           ))}
+           {filteredApplications.length === 0 && (
+             <div className="p-8 text-center text-neutral-500 text-sm">
+               {searchTerm ? "No matches found." : "No applications found."}
+             </div>
+           )}
+        </div>
+      </aside>
+
+      {/* Main Content */}
+      <main className="flex-1 flex overflow-hidden">
+        {selectedApp ? (
+          <>
+            {/* Center Panel */}
+            <div className="flex-1 flex flex-col min-w-0 overflow-y-auto bg-neutral-950">
+              {/* Header */}
+              <div className="p-8 border-b border-white/5">
+                 <div className="flex items-start justify-between">
+                    <div className="flex gap-6">
+                      {/* Avatar Placeholder */}
+                      <div className="h-20 w-20 rounded-xl bg-neutral-800 flex items-center justify-center text-3xl shrink-0">
+                        {selectedApp.user.name ? selectedApp.user.name.charAt(0).toUpperCase() : "👤"}
+                      </div>
+                      <div>
+                        <h1 className="text-3xl font-bold text-white mb-2">{selectedApp.user.name || "Unknown Applicant"}</h1>
+                        <div className="text-neutral-400 text-sm mb-4">
+                           {/* Placeholder for Major/Class until modeled */}
+                           Engineering • Class of 20XX
+                        </div>
+                        <div className="flex gap-2">
+                          <span className="px-2 py-1 rounded bg-orange-500/10 text-orange-400 text-xs font-medium border border-orange-500/20">
+                            {selectedApp.team} Team
+                          </span>
+                           <span className="px-2 py-1 rounded bg-blue-500/10 text-blue-400 text-xs font-medium border border-blue-500/20">
+                            3.X GPA
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <button className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-white text-black text-sm font-medium hover:bg-neutral-200 transition-colors">
+                        <Mail className="h-4 w-4" /> Email
+                      </button>
+                      <button className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-neutral-800 text-white text-sm font-medium border border-white/10 hover:bg-neutral-700 transition-colors">
+                        <Edit className="h-4 w-4" /> Edit
+                      </button>
+                    </div>
+                 </div>
+              </div>
+
+              {/* Tabs */}
+              <div className="flex border-b border-white/5 px-8">
+                 {["application", "resume", "scorecard"].map((tab) => (
+                   <button
+                     key={tab}
+                     onClick={() => setActiveTab(tab as any)}
+                     className={clsx(
+                       "px-6 py-4 text-sm font-medium border-b-2 transition-colors",
+                       activeTab === tab 
+                         ? "border-orange-500 text-orange-500" 
+                         : "border-transparent text-neutral-400 hover:text-white"
+                     )}
+                   >
+                     {tab.charAt(0).toUpperCase() + tab.slice(1)} {tab === "resume" && "View"}
+                   </button>
+                 ))}
+              </div>
+
+              {/* Tab Content */}
+              <div className="p-8">
+                {activeTab === "application" && (
+                   <div className="space-y-8 max-w-3xl">
+                      <div>
+                        <h3 className="text-lg font-bold text-white mb-4">Why do you want to join Longhorn Racing?</h3>
+                        <p className="text-neutral-300 leading-relaxed whitespace-pre-wrap">
+                          {selectedApp.formData.whyJoin || "No answer provided."}
+                        </p>
+                      </div>
+                      <div className="h-px bg-white/5" />
+                      <div>
+                        <h3 className="text-lg font-bold text-white mb-4">Describe a technical problem you solved recently.</h3>
+                        <p className="text-neutral-300 leading-relaxed whitespace-pre-wrap">
+                          {selectedApp.formData.relevantExperience || "No answer provided."}
+                        </p>
+                      </div>
+                      
+                      {/* Team Specific Questions */}
+                      {selectedApp.formData.teamQuestions && Object.entries(selectedApp.formData.teamQuestions).map(([qId, answer]) => (
+                        <div key={qId}>
+                           <div className="h-px bg-white/5 my-8" />
+                           <h3 className="text-lg font-bold text-white mb-4">Team Question ({qId})</h3>
+                           <p className="text-neutral-300 leading-relaxed whitespace-pre-wrap">{answer as string}</p>
+                        </div>
+                      ))}
+                   </div>
+                )}
+                
+                {activeTab === "resume" && (
+                  <div className="flex flex-col items-center justify-center p-12 border-2 border-dashed border-neutral-800 rounded-xl bg-neutral-900/50">
+                    {selectedApp.formData.resumeUrl ? (
+                      <div className="text-center">
+                         <FileText className="h-16 w-16 text-neutral-500 mb-4 mx-auto" />
+                         <p className="text-neutral-400 mb-4">Resume provided</p>
+                         <a 
+                           href={selectedApp.formData.resumeUrl} 
+                           target="_blank" 
+                           rel="noreferrer"
+                           className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-orange-600 hover:bg-orange-700 focus:outline-none"
+                         >
+                           Open Resume PDF
+                         </a>
+                      </div>
+                    ) : (
+                      <div className="text-neutral-500">No resume uploaded.</div>
+                    )}
+                  </div>
+                )}
+
+                {activeTab === "scorecard" && (
+                   scorecardLoading ? <div className="text-neutral-500">Loading scorecard...</div> :
+                   !scorecardConfig ? <div className="text-neutral-500">No scorecard configuration found for this team.</div> :
+                   (
+                       <form onSubmit={handleScorecardSubmit} className="max-w-2xl space-y-6">
+                           {scorecardConfig.fields.map(field => (
+                               <div key={field.id} className="p-4 rounded-lg bg-neutral-900 border border-white/5">
+                                   <label className="block text-sm font-bold text-white mb-1">
+                                       {field.label} {field.required && <span className="text-red-500">*</span>}
+                                   </label>
+                                   {field.description && <p className="text-xs text-neutral-500 mb-3">{field.description}</p>}
+                                   
+                                   {field.type === "rating" && (
+                                       <div className="flex items-center gap-4">
+                                            {[1, 2, 3, 4, 5].map(val => (
+                                                <label key={val} className="flex flex-col items-center cursor-pointer group">
+                                                    <input 
+                                                      type="radio" 
+                                                      name={field.id} 
+                                                      value={val}
+                                                      checked={scorecardData[field.id] === val}
+                                                      onChange={() => setScorecardData(prev => ({ ...prev, [field.id]: val }))}
+                                                      className="hidden"
+                                                    />
+                                                    <div className={clsx(
+                                                        "w-10 h-10 rounded-full flex items-center justify-center font-bold transition-all border",
+                                                        scorecardData[field.id] === val 
+                                                          ? "bg-orange-500 text-white border-orange-500" 
+                                                          : "bg-neutral-800 text-neutral-400 border-white/10 group-hover:border-orange-500/50"
+                                                    )}>
+                                                        {val}
+                                                    </div>
+                                                </label>
+                                            ))}
+                                       </div>
+                                   )}
+
+                                   {field.type === "text" && (
+                                       <input 
+                                         type="text" 
+                                         className="w-full bg-neutral-800 border border-white/10 rounded px-3 py-2 text-white focus:outline-none focus:border-orange-500"
+                                         value={scorecardData[field.id] || ""}
+                                         onChange={(e) => setScorecardData(prev => ({ ...prev, [field.id]: e.target.value }))}
+                                       />
+                                   )}
+
+                                    {field.type === "long_text" && (
+                                       <textarea 
+                                         className="w-full bg-neutral-800 border border-white/10 rounded px-3 py-2 text-white focus:outline-none focus:border-orange-500 h-24"
+                                         value={scorecardData[field.id] || ""}
+                                         onChange={(e) => setScorecardData(prev => ({ ...prev, [field.id]: e.target.value }))}
+                                       />
+                                   )}
+
+                                   {field.type === "boolean" && (
+                                       <div className="flex gap-4">
+                                           <button 
+                                             type="button"
+                                             onClick={() => setScorecardData(prev => ({ ...prev, [field.id]: true }))}
+                                             className={clsx(
+                                                 "px-4 py-2 rounded text-sm font-medium border transition-colors",
+                                                 scorecardData[field.id] === true 
+                                                    ? "bg-green-500/20 border-green-500 text-green-400" 
+                                                    : "bg-neutral-800 border-white/10 text-neutral-400"
+                                             )}
+                                           >
+                                               Yes
+                                           </button>
+                                           <button 
+                                             type="button"
+                                             onClick={() => setScorecardData(prev => ({ ...prev, [field.id]: false }))}
+                                             className={clsx(
+                                                 "px-4 py-2 rounded text-sm font-medium border transition-colors",
+                                                 scorecardData[field.id] === false
+                                                    ? "bg-red-500/20 border-red-500 text-red-500" 
+                                                    : "bg-neutral-800 border-white/10 text-neutral-400"
+                                             )}
+                                           >
+                                               No
+                                           </button>
+                                       </div>
+                                   )}
+                               </div>
+                           ))}
+                           
+                           <div className="flex justify-end">
+                               <button 
+                                 type="submit" 
+                                 disabled={scorecardSaving}
+                                 className="px-6 py-2 bg-orange-600 text-white rounded font-medium hover:bg-orange-700 transition-colors disabled:opacity-50"
+                               >
+                                   {scorecardSaving ? "Saving..." : "Save Scorecard"}
+                               </button>
+                           </div>
+                       </form>
+                   )
+                )}
+              </div>
+            </div>
+
+            {/* Right Sidebar */}
+            <aside className="w-80 flex-shrink-0 border-l border-white/5 bg-neutral-900/30 overflow-y-auto p-6 space-y-8">
+               {/* Current Status */}
+               <div>
+                 <div className="flex items-center justify-between mb-4">
+                   <h3 className="font-bold text-white">Current Status</h3>
+                   <Clock className="h-4 w-4 text-neutral-500" />
+                 </div>
+                 
+                 {/* Progress Bar (Mock) */}
+                 <div className="flex justify-between items-center text-xs font-medium text-neutral-500 mb-2">
+                   <span className={clsx(true && "text-orange-500")}>Applied</span>
+                   <span className={clsx(selectedApp.status !== "in_progress" && "text-orange-500")}>Review</span>
+                   <span>Interview</span>
+                   <span>Offer</span>
+                 </div>
+                 <div className="h-1.5 bg-neutral-800 rounded-full overflow-hidden mb-6">
+                    <div className="h-full bg-orange-500 w-1/4"></div>
+                 </div>
+
+                 {/* Current State Dropdown Mock */}
+                 <div className="bg-neutral-800 rounded-lg p-3 text-sm text-white font-medium flex justify-between items-center mb-4">
+                    <span>{selectedApp.status.replace("_", " ").toUpperCase()}</span>
+                 </div>
+
+                 <div className="grid grid-cols-2 gap-3">
+                   <button 
+                     disabled={statusLoading}
+                     onClick={() => handleStatusUpdate(ApplicationStatus.REJECTED)}
+                     className="flex items-center justify-center gap-2 py-2 rounded-lg bg-neutral-800 text-white text-sm font-medium hover:bg-neutral-700 transition-colors border border-white/5 disabled:opacity-50"
+                   >
+                     <XCircle className="h-4 w-4" /> Reject
+                   </button>
+                   <button
+                     disabled={statusLoading}
+                     onClick={() => handleStatusUpdate(ApplicationStatus.INTERVIEW)}
+                     className="flex items-center justify-center gap-2 py-2 rounded-lg bg-orange-600 text-white text-sm font-medium hover:bg-orange-500 transition-colors shadow-lg shadow-orange-900/20 disabled:opacity-50"
+                   >
+                     <CheckCircle className="h-4 w-4" /> Advance
+                   </button>
+                 </div>
+               </div>
+
+               <div className="h-px bg-white/5" />
+
+               {/* Team Notes */}
+               <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="font-bold text-white">Team Notes</h3>
+                    <span className="bg-orange-500/20 text-orange-500 text-xs px-2 py-0.5 rounded-full">{notes.length}</span>
+                  </div>
+                  
+                  <div className="space-y-3 mb-4 max-h-60 overflow-y-auto">
+                    {notes.map(note => (
+                        <div key={note.id} className="bg-neutral-800/50 rounded-lg p-3 text-sm">
+                            <div className="flex justify-between items-center mb-1">
+                                <span className="font-bold text-white text-xs">{note.authorName}</span>
+                                <span className="text-neutral-500 text-[10px]">{format(new Date(note.createdAt), "MMM d, h:mm a")}</span>
+                            </div>
+                            <p className="text-neutral-300 leading-relaxed">{note.content}</p>
+                        </div>
+                    ))}
+                    {notes.length === 0 && <p className="text-neutral-500 text-sm italic text-center">No notes yet.</p>}
+                  </div>
+
+                  <div className="relative">
+                     <input 
+                       type="text" 
+                       placeholder="Add a note..." 
+                       value={newNote}
+                       onChange={(e) => setNewNote(e.target.value)}
+                       onKeyDown={(e) => e.key === "Enter" && handleAddNote()}
+                       disabled={sendingNote}
+                       className="w-full bg-neutral-900 border border-white/10 rounded-md py-2 pl-3 pr-10 text-sm text-white placeholder:text-neutral-600 focus:outline-none focus:border-orange-500/50 disabled:opacity-50"
+                     />
+                     <button 
+                       onClick={handleAddNote}
+                       disabled={sendingNote}
+                       className="absolute right-2 top-1/2 -translate-y-1/2 text-orange-500 hover:text-orange-400 disabled:opacity-50"
+                     >
+                        <MessageSquare className="h-4 w-4" />
+                     </button>
+                  </div>
+               </div>
+
+               <div className="h-px bg-white/5" />
+               
+               {/* Tasks */}
+               <div>
+                  <h3 className="font-bold text-white mb-4">Tasks</h3>
+                  <div className="space-y-3">
+                    {tasks.map(task => (
+                        <label key={task.id} className="flex items-start gap-3 p-2 hover:bg-white/5 rounded-lg cursor-pointer transition-colors group">
+                           <div className="relative flex items-start">
+                             <input 
+                               type="checkbox" 
+                               checked={task.isCompleted}
+                               onChange={(e) => handleToggleTask(task.id, e.target.checked)}
+                               className="mt-1 rounded border-neutral-600 bg-neutral-800 text-orange-600 focus:ring-orange-600 focus:ring-offset-neutral-900" 
+                             />
+                           </div>
+                           <div className="text-sm">
+                               <span className={clsx("text-neutral-300", task.isCompleted && "line-through text-neutral-500")}>
+                                   {task.description}
+                               </span>
+                               {task.isCompleted && task.completedBy && (
+                                   <div className="text-xs text-neutral-600 mt-1">Done</div>
+                               )}
+                           </div>
+                        </label>
+                    ))}
+                     <button 
+                       onClick={handleAddTask}
+                       className="flex items-center gap-2 text-orange-500 text-xs font-medium mt-2 hover:text-orange-400 pl-2"
+                     >
+                        <Plus className="h-3 w-3" /> Add Task
+                     </button>
+                  </div>
+               </div>
+
+            </aside>
+          </>
+        ) : (
+          <div className="flex-1 flex flex-col items-center justify-center text-neutral-500">
+             <div className="text-5xl mb-4">👋</div>
+             <p className="text-lg font-medium">Select an applicant to view details</p>
+          </div>
+        )}
+      </main>
+    </div>
+  );
+}

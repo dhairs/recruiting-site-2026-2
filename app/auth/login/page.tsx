@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { auth } from "@/lib/firebase/client";
 import { signInWithGoogle, signOut } from "@/lib/firebase/auth";
 import { useState } from "react";
+import { UserRole } from "@/lib/models/User";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -25,11 +26,16 @@ export default function LoginPage() {
         body: JSON.stringify({ idToken }),
       });
 
+      const data = await response.json();
+
       if (response.ok) {
-        // Force a hard reload to ensure all client state is cleared and updated
-        window.location.href = "/dashboard";
+        // Redirect based on role
+        if (data.role === UserRole.ADMIN) {
+           window.location.href = "/admin/dashboard";
+        } else {
+           window.location.href = "/dashboard";
+        }
       } else {
-        const data = await response.json();
         console.error("Login failed:", data.error);
         setError(data.error || "Login failed");
         await signOut(); // Sign out from client SDK if session creation failed

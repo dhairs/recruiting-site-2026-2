@@ -5,6 +5,7 @@ export enum ApplicationStatus {
   SUBMITTED = "submitted",
   UNDER_REVIEW = "under_review",
   INTERVIEW = "interview",
+  TRIAL = "trial",
   ACCEPTED = "accepted",
   REJECTED = "rejected",
 }

@@ -22,8 +22,12 @@ export function middleware(request: NextRequest) {
 
   // If session cookie exists and user is on login or home page, redirect to dashboard
   if (sessionCookie && (isLoginPage || isHomePage)) {
-    console.log("Redirecting to dashboard from", request.nextUrl.pathname);
-    const dashboardUrl = new URL("/dashboard", request.url);
+    const userRole = request.cookies.get("user_role")?.value;
+    console.log("Redirecting to dashboard from", request.nextUrl.pathname, "Role:", userRole);
+    
+    // Redirect to admin dashboard if admin, otherwise member dashboard
+    const targetPath = userRole === "admin" ? "/admin/dashboard" : "/dashboard";
+    const dashboardUrl = new URL(targetPath, request.url);
     return NextResponse.redirect(dashboardUrl);
   }
 

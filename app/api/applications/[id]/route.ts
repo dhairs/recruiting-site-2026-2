@@ -6,6 +6,8 @@ import {
   updateApplicationFormData,
 } from "@/lib/firebase/applications";
 import { ApplicationStatus } from "@/lib/models/Application";
+import { getRecruitingConfig } from "@/lib/firebase/config";
+import { RecruitingStep } from "@/lib/models/Config";
 import pino from "pino";
 
 const logger = pino();
@@ -87,6 +89,12 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   }
 
   try {
+    // Check Global Recruiting Step
+    const config = await getRecruitingConfig();
+    if (config.currentStep !== RecruitingStep.OPEN) {
+        return NextResponse.json({ error: "Applications are closed" }, { status: 403 });
+    }
+
     const existingApplication = await getApplication(id);
 
     if (!existingApplication) {

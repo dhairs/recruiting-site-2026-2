@@ -8,7 +8,7 @@ import { TEAM_INFO } from "@/lib/models/teamQuestions";
 import { routes } from "@/lib/routes";
 import InterviewScheduler from "@/components/InterviewScheduler";
 
-function getStatusBadge(status: ApplicationStatus) {
+function getStatusBadge(status: ApplicationStatus, isApplicationsOpen: boolean) {
   const styles = {
     [ApplicationStatus.IN_PROGRESS]: {
       bg: "bg-yellow-500/10",
@@ -46,7 +46,30 @@ function getStatusBadge(status: ApplicationStatus) {
       text: "text-red-400",
       label: "Rejected",
     },
+    [ApplicationStatus.TRIAL]: {
+      bg: "bg-purple-500/10",
+      border: "border-purple-500/20",
+      text: "text-purple-400",
+      label: "Trial Workday",
+    },
   };
+
+  // Override for In Progress when closed
+  if (!isApplicationsOpen && status === ApplicationStatus.IN_PROGRESS) {
+    const closedStyle = {
+      bg: "bg-neutral-500/10",
+      border: "border-neutral-500/20",
+      text: "text-neutral-400",
+      label: "Not Submitted",
+    };
+    return (
+      <span
+        className={`px-2 py-1 text-xs font-medium rounded-full ${closedStyle.bg} ${closedStyle.border} ${closedStyle.text} border`}
+      >
+        {closedStyle.label}
+      </span>
+    );
+  }
 
   const style = styles[status] || styles[ApplicationStatus.IN_PROGRESS];
 
@@ -59,11 +82,16 @@ function getStatusBadge(status: ApplicationStatus) {
   );
 }
 
+import { RecruitingStep } from "@/lib/models/Config";
+
+// ... existing imports ...
+
 export default function Dashboard() {
   const searchParams = useSearchParams();
   const justSubmitted = searchParams.get("submitted") === "true";
 
   const [applications, setApplications] = useState<Application[]>([]);
+  const [recruitingStep, setRecruitingStep] = useState<RecruitingStep>(RecruitingStep.OPEN);
   const [loading, setLoading] = useState(true);
   const [showSuccessMessage, setShowSuccessMessage] = useState(justSubmitted);
 
@@ -74,6 +102,9 @@ export default function Dashboard() {
         if (res.ok) {
           const data = await res.json();
           setApplications(data.applications || []);
+          if (data.step) {
+             setRecruitingStep(data.step);
+          }
         }
       } catch (err) {
         console.error("Failed to fetch applications:", err);
@@ -98,6 +129,16 @@ export default function Dashboard() {
     (team) => !appliedTeams.has(team.team)
   );
 
+  const isApplicationsOpen = recruitingStep === RecruitingStep.OPEN;
+
+  // Handle errors / showing closed status
+  const handleApplyClick = (e: React.MouseEvent) => {
+      if (!isApplicationsOpen) {
+          e.preventDefault();
+          alert("Applications are currently closed.");
+      }
+  };
+
   return (
     <main className="min-h-screen bg-black pt-24 pb-20">
       <div className="container mx-auto px-4">
@@ -112,6 +153,20 @@ export default function Dashboard() {
               />
             </svg>
             Your application has been submitted successfully!
+          </div>
+        )}
+
+        {/* Closed Banner */}
+        {!isApplicationsOpen && (
+             <div className="mb-6 p-4 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm flex items-center gap-3">
+            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+              <path
+                fillRule="evenodd"
+                d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z"
+                clipRule="evenodd"
+              />
+            </svg>
+            <strong>Applications are currently closed.</strong> You can check your status below, but new applications cannot be submitted.
           </div>
         )}
 
@@ -133,7 +188,7 @@ export default function Dashboard() {
                 <h2 className="text-xl font-bold text-white">
                   Your Applications
                 </h2>
-                {availableTeams.length > 0 && (
+                {availableTeams.length > 0 && isApplicationsOpen && (
                   <Link
                     href={routes.apply}
                     className="text-sm font-medium text-red-500 hover:text-red-400 transition-colors flex items-center gap-1"
@@ -185,14 +240,18 @@ export default function Dashboard() {
                     No applications yet
                   </h3>
                   <p className="text-neutral-400 text-sm mb-6">
-                    Start your journey by applying to one of our teams.
+                    {isApplicationsOpen 
+                        ? "Start your journey by applying to one of our teams." 
+                        : "Applications are closed for this cycle."}
                   </p>
-                  <Link
-                    href={routes.apply}
-                    className="inline-flex h-10 items-center justify-center rounded-lg bg-red-600 px-6 text-sm font-medium text-white hover:bg-red-700 transition-colors"
-                  >
-                    Apply Now
-                  </Link>
+                  {isApplicationsOpen && (
+                      <Link
+                        href={routes.apply}
+                        className="inline-flex h-10 items-center justify-center rounded-lg bg-red-600 px-6 text-sm font-medium text-white hover:bg-red-700 transition-colors"
+                      >
+                        Apply Now
+                      </Link>
+                  )}
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -219,7 +278,7 @@ export default function Dashboard() {
                           </div>
                           <div className="flex items-center gap-3">
                             {getStatusBadge(app.status)}
-                            {app.status === ApplicationStatus.IN_PROGRESS && (
+                            {app.status === ApplicationStatus.IN_PROGRESS && isApplicationsOpen && (
                               <Link
                                 href={routes.applyTeam(app.team)}
                                 className="text-sm font-medium text-neutral-400 hover:text-white transition-colors"
@@ -261,7 +320,7 @@ export default function Dashboard() {
             )}
 
             {/* Quick Apply Section */}
-            {availableTeams.length > 0 && applications.length > 0 && (
+            {availableTeams.length > 0 && applications.length > 0 && isApplicationsOpen && (
               <div className="p-6 rounded-2xl bg-neutral-900 border border-white/5">
                 <h2 className="text-xl font-bold text-white mb-4">
                   Apply to More Teams
@@ -302,14 +361,17 @@ export default function Dashboard() {
               <div className="space-y-4">
                 <div className="p-4 rounded-lg bg-black/50 border border-white/5">
                   <span className="text-xs font-medium text-red-500 mb-1 block">
-                    New
+                    {isApplicationsOpen ? "New" : "Notice"}
                   </span>
                   <h3 className="text-sm font-bold text-white mb-1">
-                    Applications Open
+                    {isApplicationsOpen 
+                        ? "Applications Open" 
+                        : "Applications Closed"}
                   </h3>
                   <p className="text-xs text-neutral-400">
-                    We're now accepting applications for the Spring 2025
-                    semester!
+                    {isApplicationsOpen
+                        ? "We're now accepting applications for the Spring 2025 semester!"
+                        : "Applications are no longer being accepted at this time."}
                   </p>
                 </div>
                 <div className="p-4 rounded-lg bg-black/50 border border-white/5">

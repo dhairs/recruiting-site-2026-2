@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { adminAuth } from "@/lib/firebase/admin";
 import { updateUserData, userExists } from "@/lib/firebase/database";
 import { User, UserRole } from "@/lib/models/User";
+import { getUser } from "@/lib/firebase/users";
 import { DecodedIdToken, UserRecord } from "firebase-admin/auth";
 import pino from "pino";
 
@@ -53,16 +54,12 @@ export async function POST(request: Request) {
     //   return response;
     // }
 
-    const response = NextResponse.json(
-      {
-        status: "success",
-      },
-      { status: 200 }
-    );
+    const existingUser = await getUser(decodedId.uid);
+    let role = UserRole.APPLICANT;
 
-    response.cookies.set(options);
-
-    if (!(await userExists(user))) {
+    if (existingUser) {
+        role = existingUser.role;
+    } else {
       logger.info("User didn't exist, creating new user");
       // user doesn't exist, create a new user document for them
       const newUser: User = {
@@ -79,6 +76,23 @@ export async function POST(request: Request) {
       // write the new user to firestore
       await updateUserData(newUser);
     }
+
+    const response = NextResponse.json(
+      {
+        status: "success",
+        role,
+      },
+      { status: 200 }
+    );
+
+    response.cookies.set(options);
+    response.cookies.set({
+      name: "user_role",
+      value: role,
+      maxAge: expiresIn,
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+    });
 
     return response;
   } catch (error) {
