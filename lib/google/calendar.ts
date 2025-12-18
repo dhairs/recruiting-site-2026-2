@@ -278,6 +278,7 @@ export async function createInterviewEvent(
         { method: "popup", minutes: 30 }, // 30 minutes before
       ],
     },
+    guestsCanSeeOtherGuests: false, // Hide guest list from applicants
   };
 
   const response = await calendar.events.insert({
