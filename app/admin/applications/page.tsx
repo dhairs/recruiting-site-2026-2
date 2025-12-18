@@ -16,7 +16,8 @@ import {
   Clock, 
   FileText,
   MessageSquare,
-  Plus
+  Plus,
+  ExternalLink
 } from "lucide-react";
 import clsx from "clsx";
 
@@ -358,22 +359,31 @@ export default function AdminApplicationsPage() {
                 )}
                 
                 {activeTab === "resume" && (
-                  <div className="flex flex-col items-center justify-center p-12 border-2 border-dashed border-neutral-800 rounded-xl bg-neutral-900/50">
+                  <div className="flex flex-col h-full min-h-[600px]">
                     {selectedApp.formData.resumeUrl ? (
-                      <div className="text-center">
-                         <FileText className="h-16 w-16 text-neutral-500 mb-4 mx-auto" />
-                         <p className="text-neutral-400 mb-4">Resume provided</p>
-                         <a 
-                           href={selectedApp.formData.resumeUrl} 
-                           target="_blank" 
-                           rel="noreferrer"
-                           className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-orange-600 hover:bg-orange-700 focus:outline-none"
-                         >
-                           Open Resume PDF
-                         </a>
-                      </div>
+                      <>
+                        <div className="flex justify-between items-center bg-neutral-900 border border-white/5 rounded-t-lg px-4 py-3">
+                           <span className="text-sm font-medium text-neutral-400">Resume Preview</span>
+                           <a 
+                             href={selectedApp.formData.resumeUrl} 
+                             target="_blank" 
+                             rel="noreferrer"
+                             className="flex items-center gap-2 text-xs font-medium text-orange-500 hover:text-orange-400 transition-colors"
+                           >
+                              Open in New Tab <ExternalLink className="h-3 w-3" />
+                           </a>
+                        </div>
+                        <iframe 
+                          src={selectedApp.formData.resumeUrl} 
+                          className="w-full flex-1 bg-white border-x border-b border-white/5 rounded-b-lg h-[calc(100vh-350px)]" 
+                          title="Resume"
+                        />
+                      </>
                     ) : (
-                      <div className="text-neutral-500">No resume uploaded.</div>
+                      <div className="flex flex-col items-center justify-center h-64 border-2 border-dashed border-neutral-800 rounded-xl bg-neutral-900/50">
+                         <FileText className="h-16 w-16 text-neutral-500 mb-4 mx-auto" />
+                         <div className="text-neutral-500">No resume uploaded.</div>
+                      </div>
                     )}
                   </div>
                 )}
