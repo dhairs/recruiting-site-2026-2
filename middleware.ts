@@ -9,9 +9,11 @@ export function middleware(request: NextRequest) {
 
   // If no session cookie and the user is trying to access a protected page, redirect to login
   // We only need to check this for protected routes, but since we expanded the matcher, we need to be careful.
-  // The matcher includes dashboard, profile, home, and login.
+  // The matcher includes dashboard, profile, home, login, and apply pages.
   // We should explicitly check if it's a protected route.
-  const isProtectedRoute = request.nextUrl.pathname.startsWith("/dashboard") || request.nextUrl.pathname.startsWith("/profile");
+  const isProtectedRoute = request.nextUrl.pathname.startsWith("/dashboard") || 
+    request.nextUrl.pathname.startsWith("/profile") ||
+    request.nextUrl.pathname.startsWith("/apply");
 
   if (!sessionCookie && isProtectedRoute) {
     const loginUrl = new URL(routes.login, request.url);
@@ -31,5 +33,5 @@ export function middleware(request: NextRequest) {
 
 // protected routes AND routes we want to redirect FROM if logged in
 export const config = {
-  matcher: ["/dashboard/:path*", "/profile", "/", "/auth/login"],
+  matcher: ["/dashboard/:path*", "/profile", "/", "/auth/login", "/apply/:path*"],
 };

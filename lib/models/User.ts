@@ -21,9 +21,21 @@ export enum ElectricSystem {
   // TRACKSIDE_ENGINEERING = "Trackside Engineering",
 }
 
-export enum SolarSystem {}
+export enum SolarSystem {
+  // Placeholder - to be defined
+  AERODYNAMICS = "Aerodynamics",
+  SOLAR_ARRAY = "Solar Array",
+  STRATEGY = "Strategy",
+  ELECTRICAL = "Electrical",
+}
 
-export enum CombustionSystem {}
+export enum CombustionSystem {
+  // Placeholder - to be defined
+  ENGINE = "Engine",
+  CHASSIS = "Chassis",
+  SUSPENSION = "Suspension",
+  DRIVETRAIN = "Drivetrain",
+}
 
 export interface Member {
   team: Team;
