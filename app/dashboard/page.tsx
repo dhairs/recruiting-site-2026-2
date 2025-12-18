@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Application, ApplicationStatus } from "@/lib/models/Application";
 import { TEAM_INFO } from "@/lib/models/teamQuestions";
 import { routes } from "@/lib/routes";
+import InterviewScheduler from "@/components/InterviewScheduler";
 
 function getStatusBadge(status: ApplicationStatus) {
   const styles = {
@@ -26,6 +27,12 @@ function getStatusBadge(status: ApplicationStatus) {
       border: "border-purple-500/20",
       text: "text-purple-400",
       label: "Under Review",
+    },
+    [ApplicationStatus.INTERVIEW]: {
+      bg: "bg-cyan-500/10",
+      border: "border-cyan-500/20",
+      text: "text-cyan-400",
+      label: "Interview",
     },
     [ApplicationStatus.ACCEPTED]: {
       bg: "bg-green-500/10",
@@ -113,7 +120,7 @@ export default function Dashboard() {
             Member <span className="text-red-600">Dashboard</span>
           </h1>
           <p className="text-neutral-400">
-            Welcome back! Here's what's happening at Longhorn Racing.
+            Welcome back! Keep track of your applications and interviews here.
           </p>
         </div>
 
@@ -228,6 +235,30 @@ export default function Dashboard() {
                 </div>
               )}
             </div>
+
+            {/* Interview Scheduling Section */}
+            {applications.some(
+              (app) => app.status === ApplicationStatus.INTERVIEW
+            ) && (
+              <div className="space-y-4">
+                {applications
+                  .filter((app) => app.status === ApplicationStatus.INTERVIEW)
+                  .map((app) => (
+                    <InterviewScheduler
+                      key={`interview-${app.id}`}
+                      application={app}
+                      onScheduled={() => {
+                        // Refetch applications to update status
+                        fetch("/api/applications")
+                          .then((res) => res.json())
+                          .then((data) =>
+                            setApplications(data.applications || [])
+                          );
+                      }}
+                    />
+                  ))}
+              </div>
+            )}
 
             {/* Quick Apply Section */}
             {availableTeams.length > 0 && applications.length > 0 && (

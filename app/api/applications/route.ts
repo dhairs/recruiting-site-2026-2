@@ -42,6 +42,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+
   try {
     const applications = await getUserApplications(uid);
     return NextResponse.json({ applications }, { status: 200 });
