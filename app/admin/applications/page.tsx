@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { Application, ApplicationStatus } from "@/lib/models/Application";
-import { Team, User } from "@/lib/models/User";
+import { Team, User, UserRole } from "@/lib/models/User";
+import { TEAM_SYSTEMS } from "@/lib/models/teamQuestions";
 import { TEAM_INFO, TEAM_QUESTIONS } from "@/lib/models/teamQuestions";
 import { Note, ReviewTask } from "@/lib/models/ApplicationExtras";
 import { ScorecardConfig, ScorecardSubmission } from "@/lib/models/Scorecard";
@@ -67,6 +68,17 @@ export default function AdminApplicationsPage() {
   const [newTaskDescription, setNewTaskDescription] = useState("");
   const [isAddingTask, setIsAddingTask] = useState(false);
 
+  // Current user state (for role-based behavior)
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+
+  // Interview offer modal state
+  const [showInterviewModal, setShowInterviewModal] = useState(false);
+  const [selectedInterviewSystems, setSelectedInterviewSystems] = useState<string[]>([]);
+
+  // Rejection modal state
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [selectedRejectSystems, setSelectedRejectSystems] = useState<string[]>([]);
+
   // Scorecard State
   const [scorecardConfig, setScorecardConfig] = useState<ScorecardConfig | null>(null);
   const [scorecardData, setScorecardData] = useState<Record<string, any>>({});
@@ -83,6 +95,12 @@ export default function AdminApplicationsPage() {
           if (data.applications?.length > 0) {
             setSelectedAppId(data.applications[0].id);
           }
+        }
+        // Fetch current user
+        const userRes = await fetch("/api/auth/me");
+        if (userRes.ok) {
+          const userData = await userRes.json();
+          setCurrentUser(userData.user);
         }
       } catch (err) {
         console.error("Failed to fetch applications", err);
@@ -130,22 +148,98 @@ export default function AdminApplicationsPage() {
   }, [activeTab, selectedAppId]);
 
 
-  const handleStatusUpdate = async (status: ApplicationStatus) => {
+  const handleStatusUpdate = async (status: ApplicationStatus, systems?: string[]) => {
     if (!selectedAppId) return;
     setStatusLoading(true);
     try {
         const res = await fetch(`/api/admin/applications/${selectedAppId}/status`, {
             method: "POST",
-            body: JSON.stringify({ status }),
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ status, systems }),
         });
-        if (res.ok) {
-            // Update local state
-            setApplications(prev => prev.map(a => a.id === selectedAppId ? { ...a, status } : a));
+        const data = await res.json();
+        
+        if (res.ok && data.application) {
+            // Update local state with the full application data (includes interview offers)
+            setApplications(prev => prev.map(a => 
+              a.id === selectedAppId 
+                ? { ...a, ...data.application, user: a.user } 
+                : a
+            ));
+            toast.success(`Status updated to ${status.replace("_", " ")}`);
+            setShowInterviewModal(false);
+        } else {
+            toast.error(data.error || "Failed to update status");
         }
     } catch (e) {
         console.error("Failed to update status", e);
+        toast.error("Failed to update status");
     } finally {
         setStatusLoading(false);
+    }
+  };
+
+  // Handle Advance button click - show modal for higher roles, auto-advance for reviewers
+  const handleAdvanceClick = () => {
+    if (!selectedApp) return;
+    
+    // For Reviewers, auto-use their system
+    if (currentUser?.role === UserRole.REVIEWER) {
+      handleStatusUpdate(ApplicationStatus.INTERVIEW);
+      return;
+    }
+    
+    // For higher roles, show modal to select systems
+    // Pre-select systems that already have interview offers
+    const existingOfferSystems = selectedApp.interviewOffers?.map(o => o.system) || [];
+    setSelectedInterviewSystems(existingOfferSystems);
+    setShowInterviewModal(true);
+  };
+
+  // Get available systems for the selected application's team
+  const getTeamSystemOptions = () => {
+    if (!selectedApp) return [];
+    return TEAM_SYSTEMS[selectedApp.team as Team] || [];
+  };
+
+  // Handle Reject button click - show modal for selecting systems to reject
+  const handleRejectClick = () => {
+    if (!selectedApp) return;
+    
+    // Pre-select all systems with active interview offers
+    const existingOfferSystems = selectedApp.interviewOffers?.map(o => o.system) || [];
+    setSelectedRejectSystems(existingOfferSystems);
+    setShowRejectModal(true);
+  };
+
+  // Handle rejection submission
+  const handleRejectSubmit = async () => {
+    if (!selectedAppId || selectedRejectSystems.length === 0) return;
+    setStatusLoading(true);
+    try {
+      const res = await fetch(`/api/admin/applications/${selectedAppId}/reject`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ systems: selectedRejectSystems }),
+      });
+      const data = await res.json();
+      
+      if (res.ok && data.application) {
+        setApplications(prev => prev.map(a => 
+          a.id === selectedAppId 
+            ? { ...a, ...data.application, user: a.user } 
+            : a
+        ));
+        toast.success(`Rejected from ${selectedRejectSystems.length} system(s)`);
+        setShowRejectModal(false);
+      } else {
+        toast.error(data.error || "Failed to reject");
+      }
+    } catch (e) {
+      console.error("Failed to reject", e);
+      toast.error("Failed to reject");
+    } finally {
+      setStatusLoading(false);
     }
   };
 
@@ -232,7 +326,8 @@ export default function AdminApplicationsPage() {
     const matchesName = app.user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       app.user.email.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilters.length === 0 || statusFilters.includes(app.status);
-    const matchesSystem = systemFilters.length === 0 || (app.preferredSystem && systemFilters.includes(app.preferredSystem));
+    const appSystems = app.preferredSystems || (app.preferredSystem ? [app.preferredSystem] : []);
+    const matchesSystem = systemFilters.length === 0 || appSystems.some(s => systemFilters.includes(s));
     const matchesTeam = teamFilters.length === 0 || teamFilters.includes(app.team);
     return matchesName && matchesStatus && matchesSystem && matchesTeam;
   });
@@ -624,14 +719,14 @@ export default function AdminApplicationsPage() {
                  <div className="grid grid-cols-2 gap-3">
                    <button 
                      disabled={statusLoading}
-                     onClick={() => handleStatusUpdate(ApplicationStatus.REJECTED)}
+                     onClick={handleRejectClick}
                      className="flex items-center justify-center gap-2 py-2 rounded-lg bg-neutral-800 text-white text-sm font-medium hover:bg-neutral-700 transition-colors border border-white/5 disabled:opacity-50"
                    >
                      <XCircle className="h-4 w-4" /> Reject
                    </button>
                    <button
                      disabled={statusLoading}
-                     onClick={() => handleStatusUpdate(ApplicationStatus.INTERVIEW)}
+                     onClick={handleAdvanceClick} // Updated onClick to use the new handler
                      className="flex items-center justify-center gap-2 py-2 rounded-lg bg-orange-600 text-white text-sm font-medium hover:bg-orange-500 transition-colors shadow-lg shadow-orange-900/20 disabled:opacity-50"
                    >
                      <CheckCircle className="h-4 w-4" /> Advance
@@ -763,6 +858,143 @@ export default function AdminApplicationsPage() {
           </div>
         )}
       </main>
+
+      {/* Interview Systems Selection Modal */}
+      {showInterviewModal && selectedApp && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-neutral-900 border border-white/10 rounded-2xl p-6 max-w-md w-full mx-4 shadow-2xl">
+            <h3 className="text-xl font-bold text-white mb-2">Extend Interview Offers</h3>
+            <p className="text-neutral-400 text-sm mb-6">
+              Select which systems to extend interview offers for. The applicant expressed interest in the highlighted systems.
+            </p>
+            
+            <div className="space-y-2 mb-6">
+              {getTeamSystemOptions().map((sys) => {
+                const appSystems = selectedApp.preferredSystems || 
+                  (selectedApp.preferredSystem ? [selectedApp.preferredSystem] : []);
+                const isPreferred = appSystems.includes(sys.value as any);
+                const isChecked = selectedInterviewSystems.includes(sys.value);
+                
+                return (
+                  <label
+                    key={sys.value}
+                    className={clsx(
+                      "flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all",
+                      isChecked
+                        ? "bg-orange-500/10 border-orange-500/50"
+                        : "bg-neutral-800 border-white/10 hover:border-white/20"
+                    )}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      onChange={(e) => {
+                        setSelectedInterviewSystems(prev =>
+                          e.target.checked
+                            ? [...prev, sys.value]
+                            : prev.filter(s => s !== sys.value)
+                        );
+                      }}
+                      className="w-4 h-4 rounded border-neutral-600 bg-neutral-800 text-orange-600 focus:ring-orange-600 focus:ring-offset-neutral-900"
+                    />
+                    <span className="text-white font-medium">{sys.label}</span>
+                    {isPreferred && (
+                      <span className="ml-auto text-xs bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded-full">
+                        Applicant Interest
+                      </span>
+                    )}
+                  </label>
+                );
+              })}
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowInterviewModal(false)}
+                className="flex-1 py-2 rounded-lg bg-neutral-800 text-white font-medium hover:bg-neutral-700 transition-colors border border-white/10"
+              >
+                Cancel
+              </button>
+              <button
+                disabled={selectedInterviewSystems.length === 0 || statusLoading}
+                onClick={() => handleStatusUpdate(ApplicationStatus.INTERVIEW, selectedInterviewSystems)}
+                className="flex-1 py-2 rounded-lg bg-orange-600 text-white font-medium hover:bg-orange-500 transition-colors disabled:opacity-50"
+              >
+                {statusLoading ? "Extending..." : `Extend Offers (${selectedInterviewSystems.length})`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Rejection Modal */}
+      {showRejectModal && selectedApp && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-neutral-900 border border-white/10 rounded-2xl p-6 max-w-md w-full mx-4 shadow-2xl">
+            <h3 className="text-xl font-bold text-white mb-2">Reject from Systems</h3>
+            <p className="text-neutral-400 text-sm mb-6">
+              Select which systems to reject the applicant from. The application will only be marked as "Rejected" if no interview offers remain.
+            </p>
+            
+            <div className="space-y-2 mb-6">
+              {getTeamSystemOptions().map((sys) => {
+                const hasOffer = selectedApp.interviewOffers?.some(o => o.system === sys.value);
+                const isChecked = selectedRejectSystems.includes(sys.value);
+                
+                return (
+                  <label
+                    key={sys.value}
+                    className={clsx(
+                      "flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all",
+                      isChecked
+                        ? "bg-red-500/10 border-red-500/50"
+                        : "bg-neutral-800 border-white/10 hover:border-white/20",
+                      !hasOffer && "opacity-50 cursor-not-allowed"
+                    )}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      disabled={!hasOffer}
+                      onChange={(e) => {
+                        if (!hasOffer) return;
+                        setSelectedRejectSystems(prev =>
+                          e.target.checked
+                            ? [...prev, sys.value]
+                            : prev.filter(s => s !== sys.value)
+                        );
+                      }}
+                      className="w-4 h-4 rounded border-neutral-600 bg-neutral-800 text-red-600 focus:ring-red-600 focus:ring-offset-neutral-900"
+                    />
+                    <span className="text-white font-medium">{sys.label}</span>
+                    {hasOffer && (
+                      <span className="ml-auto text-xs bg-cyan-500/20 text-cyan-400 px-2 py-0.5 rounded-full">
+                        Has Offer
+                      </span>
+                    )}
+                  </label>
+                );
+              })}
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowRejectModal(false)}
+                className="flex-1 py-2 rounded-lg bg-neutral-800 text-white font-medium hover:bg-neutral-700 transition-colors border border-white/10"
+              >
+                Cancel
+              </button>
+              <button
+                disabled={selectedRejectSystems.length === 0 || statusLoading}
+                onClick={handleRejectSubmit}
+                className="flex-1 py-2 rounded-lg bg-red-600 text-white font-medium hover:bg-red-500 transition-colors disabled:opacity-50"
+              >
+                {statusLoading ? "Rejecting..." : `Reject (${selectedRejectSystems.length})`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

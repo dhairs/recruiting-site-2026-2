@@ -118,17 +118,18 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     const body = await request.json();
-    const { formData, preferredSystem, status } = body;
+    const { formData, preferredSystem, preferredSystems, status } = body;
 
     let application;
 
     // If only formData is being updated, use the merge function
-    if (formData && !preferredSystem && !status) {
+    if (formData && !preferredSystem && !preferredSystems && !status) {
       application = await updateApplicationFormData(id, formData);
     } else {
       // Update all provided fields
       const updates: Record<string, unknown> = {};
       if (formData) updates.formData = { ...existingApplication.formData, ...formData };
+      if (preferredSystems) updates.preferredSystems = preferredSystems;
       if (preferredSystem) updates.preferredSystem = preferredSystem;
       if (status) updates.status = status;
 

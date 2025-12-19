@@ -52,7 +52,13 @@ export interface Application {
   id: string;
   userId: string;
   team: Team;
+  
+  // Multiple systems the applicant is interested in
+  preferredSystems?: (ElectricSystem | SolarSystem | CombustionSystem)[];
+  
+  /** @deprecated Use preferredSystems instead. Kept for backwards compatibility. */
   preferredSystem?: ElectricSystem | SolarSystem | CombustionSystem;
+  
   status: ApplicationStatus;
 
   createdAt: Date;

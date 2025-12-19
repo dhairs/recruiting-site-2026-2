@@ -257,7 +257,7 @@ export async function getUserApplicationForTeam(
  */
 export async function updateApplication(
   applicationId: string,
-  updates: Partial<Pick<Application, "formData" | "preferredSystem" | "status" | "interviewOffers" | "selectedInterviewSystem">>
+  updates: Partial<Pick<Application, "formData" | "preferredSystem" | "preferredSystems" | "status" | "interviewOffers" | "selectedInterviewSystem">>
 ): Promise<Application | null> {
   const applicationRef = adminDb
     .collection(APPLICATIONS_COLLECTION)
@@ -470,7 +470,7 @@ export async function getTeamApplications(team: Team): Promise<Application[]> {
 
 /**
  * Get applications for a specific System (for System Lead/Reviewer)
- * Filters by preferredSystem.
+ * Filters by preferredSystems (array-contains).
  */
 export async function getSystemApplications(
   team: Team,
@@ -479,7 +479,7 @@ export async function getSystemApplications(
   const snapshot = await adminDb
     .collection(APPLICATIONS_COLLECTION)
     .where("team", "==", team)
-    .where("preferredSystem", "==", system)
+    .where("preferredSystems", "array-contains", system)
     .get();
 
   return snapshot.docs.map((doc) => {

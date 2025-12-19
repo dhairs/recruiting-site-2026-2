@@ -270,9 +270,9 @@ function DashboardContent() {
                               <h3 className="font-medium text-white">
                                 {teamInfo?.name} Application
                               </h3>
-                              {app.preferredSystem && (
+                              {(app.preferredSystems?.length || app.preferredSystem) && (
                                 <p className="text-xs text-neutral-500">
-                                  Preferred: {app.preferredSystem}
+                                  Preferred: {(app.preferredSystems || (app.preferredSystem ? [app.preferredSystem] : [])).join(", ")}
                                 </p>
                               )}
                             </div>
