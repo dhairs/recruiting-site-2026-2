@@ -364,3 +364,22 @@ export async function updateInterviewEvent(
 
   return response.data;
 }
+
+/**
+ * List all calendars accessible to the service account.
+ * Used for populating the calendar selection dropdown.
+ */
+export async function listAccessibleCalendars(): Promise<{ id: string; summary: string }[]> {
+  const calendar = await getCalendarClient();
+
+  const response = await calendar.calendarList.list({
+    minAccessRole: "writer", // Ensure we can write to the calendar
+  });
+
+  return (
+    response.data.items?.map((item) => ({
+      id: item.id || "",
+      summary: item.summary || "Untitled Calendar",
+    })) || []
+  );
+}
