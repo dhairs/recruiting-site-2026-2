@@ -26,3 +26,12 @@ export async function getUser(uid: string): Promise<User | null> {
 export async function updateUser(uid: string, data: Partial<User>): Promise<void> {
   await adminDb.collection(USERS_COLLECTION).doc(uid).update(data);
 }
+
+/**
+ * Get all users
+ */
+export async function getAllUsers(): Promise<User[]> {
+  const snapshot = await adminDb.collection(USERS_COLLECTION).get();
+  return snapshot.docs.map((doc) => doc.data() as User);
+}
+
