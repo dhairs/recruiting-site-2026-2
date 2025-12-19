@@ -52,6 +52,8 @@ export default function AdminApplicationsPage() {
   const [selectedAppId, setSelectedAppId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"application" | "resume" | "scorecard">("application");
   const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilters, setStatusFilters] = useState<ApplicationStatus[]>([]);
+  const [systemFilters, setSystemFilters] = useState<string[]>([]);
 
   // Extras State
   const [notes, setNotes] = useState<Note[]>([]);
@@ -201,10 +203,13 @@ export default function AdminApplicationsPage() {
       }
   };
 
-  const filteredApplications = applications.filter(app => 
-    app.user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    app.user.email.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredApplications = applications.filter(app => {
+    const matchesName = app.user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      app.user.email.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesStatus = statusFilters.length === 0 || statusFilters.includes(app.status);
+    const matchesSystem = systemFilters.length === 0 || (app.preferredSystem && systemFilters.includes(app.preferredSystem));
+    return matchesName && matchesStatus && matchesSystem;
+  });
 
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -225,7 +230,7 @@ export default function AdminApplicationsPage() {
       <aside className="w-80 flex-shrink-0 border-r border-white/5 flex flex-col bg-neutral-900/30">
         <div className="p-4 border-b border-white/5">
           <div className="text-sm font-medium text-neutral-400 mb-2">Applicants</div>
-          <div className="relative">
+          <div className="relative mb-3">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-neutral-500" />
             <input 
               type="text" 
@@ -234,6 +239,52 @@ export default function AdminApplicationsPage() {
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full bg-neutral-900 border border-white/10 rounded-md py-2 pl-9 pr-3 text-sm text-white placeholder:text-neutral-600 focus:outline-none focus:border-orange-500/50"
             />
+          </div>
+          <div className="space-y-2">
+            <div className="text-xs text-neutral-500 mb-1">Status</div>
+            <div className="flex flex-wrap gap-1">
+              {Object.values(ApplicationStatus).map(status => (
+                <button
+                  key={status}
+                  onClick={() => setStatusFilters(prev => 
+                    prev.includes(status) ? prev.filter(s => s !== status) : [...prev, status]
+                  )}
+                  className={`px-2 py-1 text-xs rounded-md border transition-colors ${
+                    statusFilters.includes(status)
+                      ? 'bg-orange-500/20 border-orange-500/50 text-orange-400'
+                      : 'bg-neutral-800 border-white/10 text-neutral-400 hover:border-white/20'
+                  }`}
+                >
+                  {status.replace("_", " ").toUpperCase()}
+                </button>
+              ))}
+            </div>
+            <div className="text-xs text-neutral-500 mb-1 mt-3">System</div>
+            <div className="flex flex-wrap gap-1">
+              {[...new Set(applications.map(a => a.preferredSystem).filter(Boolean))].map(system => (
+                <button
+                  key={system}
+                  onClick={() => setSystemFilters(prev => 
+                    prev.includes(system!) ? prev.filter(s => s !== system) : [...prev, system!]
+                  )}
+                  className={`px-2 py-1 text-xs rounded-md border transition-colors ${
+                    systemFilters.includes(system!)
+                      ? 'bg-blue-500/20 border-blue-500/50 text-blue-400'
+                      : 'bg-neutral-800 border-white/10 text-neutral-400 hover:border-white/20'
+                  }`}
+                >
+                  {system}
+                </button>
+              ))}
+            </div>
+            {(statusFilters.length > 0 || systemFilters.length > 0) && (
+              <button
+                onClick={() => { setStatusFilters([]); setSystemFilters([]); }}
+                className="mt-2 text-xs text-neutral-500 hover:text-white transition-colors"
+              >
+                Clear filters
+              </button>
+            )}
           </div>
         </div>
         
@@ -288,16 +339,17 @@ export default function AdminApplicationsPage() {
                       <div>
                         <h1 className="text-3xl font-bold text-white mb-2">{selectedApp.user.name || "Unknown Applicant"}</h1>
                         <div className="text-neutral-400 text-sm mb-4">
-                           {/* Placeholder for Major/Class until modeled */}
-                           Engineering • Class of 20XX
+                           {selectedApp.formData.major || "Major not specified"} • Class of {selectedApp.formData.graduationYear || "N/A"}
                         </div>
                         <div className="flex gap-2">
                           <span className="px-2 py-1 rounded bg-orange-500/10 text-orange-400 text-xs font-medium border border-orange-500/20">
                             {selectedApp.team} Team
                           </span>
-                           <span className="px-2 py-1 rounded bg-blue-500/10 text-blue-400 text-xs font-medium border border-blue-500/20">
-                            3.X GPA
-                          </span>
+                           {selectedApp.preferredSystem && (
+                             <span className="px-2 py-1 rounded bg-blue-500/10 text-blue-400 text-xs font-medium border border-blue-500/20">
+                               {selectedApp.preferredSystem}
+                             </span>
+                           )}
                         </div>
                       </div>
                     </div>

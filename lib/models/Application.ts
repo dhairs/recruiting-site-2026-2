@@ -42,6 +42,8 @@ export interface ApplicationFormData {
   relevantExperience?: string;
   availability?: string;
   resumeUrl?: string;
+  graduationYear?: string;
+  major?: string;
   // Team-specific question answers, keyed by question ID
   teamQuestions?: Record<string, string>;
 }

@@ -33,6 +33,8 @@ interface FormData {
   availability: string;
   resumeUrl: string;
   preferredSystem: string;
+  graduationYear: string;
+  major: string;
   teamQuestions: Record<string, string>;
 }
 
@@ -71,6 +73,8 @@ export default function TeamApplicationPage() {
     availability: "",
     resumeUrl: "",
     preferredSystem: "",
+    graduationYear: "",
+    major: "",
     teamQuestions: {},
   });
 
@@ -102,6 +106,8 @@ export default function TeamApplicationPage() {
             availability: app.formData.availability || "",
             resumeUrl: app.formData.resumeUrl || "",
             preferredSystem: app.preferredSystem || "",
+            graduationYear: app.formData.graduationYear || "",
+            major: app.formData.major || "",
             teamQuestions: app.formData.teamQuestions || {},
           });
         }
@@ -132,6 +138,8 @@ export default function TeamApplicationPage() {
               relevantExperience: data.relevantExperience,
               availability: data.availability,
               resumeUrl: data.resumeUrl,
+              graduationYear: data.graduationYear,
+              major: data.major,
               teamQuestions: data.teamQuestions,
             },
             preferredSystem: data.preferredSystem || undefined,
@@ -485,14 +493,39 @@ export default function TeamApplicationPage() {
                       <span className="text-red-500 ml-1">*</span>
                     )}
                   </label>
-                  <textarea
-                    name={question.id}
-                    value={formData[question.id as keyof FormData] as string}
-                    onChange={handleChange}
-                    placeholder={question.placeholder}
-                    rows={4}
-                    className="w-full px-4 py-3 rounded-lg bg-black border border-white/10 text-white placeholder-neutral-500 focus:border-red-500 focus:outline-none transition-colors resize-none"
-                  />
+                  {question.type === "select" ? (
+                    <select
+                      name={question.id}
+                      value={formData[question.id as keyof FormData] as string}
+                      onChange={handleChange}
+                      className="w-full px-4 py-3 rounded-lg bg-black border border-white/10 text-white focus:border-red-500 focus:outline-none transition-colors"
+                    >
+                      <option value="">Select...</option>
+                      {question.options?.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                  ) : question.type === "text" ? (
+                    <input
+                      type="text"
+                      name={question.id}
+                      value={formData[question.id as keyof FormData] as string}
+                      onChange={handleChange}
+                      placeholder={question.placeholder}
+                      className="w-full px-4 py-3 rounded-lg bg-black border border-white/10 text-white placeholder-neutral-500 focus:border-red-500 focus:outline-none transition-colors"
+                    />
+                  ) : (
+                    <textarea
+                      name={question.id}
+                      value={formData[question.id as keyof FormData] as string}
+                      onChange={handleChange}
+                      placeholder={question.placeholder}
+                      rows={4}
+                      className="w-full px-4 py-3 rounded-lg bg-black border border-white/10 text-white placeholder-neutral-500 focus:border-red-500 focus:outline-none transition-colors resize-none"
+                    />
+                  )}
                 </div>
               ))}
             </div>

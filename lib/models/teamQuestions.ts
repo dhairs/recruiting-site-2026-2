@@ -87,6 +87,20 @@ export const TEAM_QUESTIONS: Record<Team, TeamQuestion[]> = {
 // Common questions for all applications
 export const COMMON_QUESTIONS: TeamQuestion[] = [
   {
+    id: "graduationYear",
+    label: "Expected Graduation Year",
+    type: "select",
+    options: ["2025", "2026", "2027", "2028", "2029", "2030"],
+    required: true,
+  },
+  {
+    id: "major",
+    label: "Major(s)",
+    type: "text",
+    required: true,
+    placeholder: "e.g., Electrical Engineering, Computer Science...",
+  },
+  {
     id: "whyJoin",
     label: "Why do you want to join Longhorn Racing?",
     type: "textarea",
