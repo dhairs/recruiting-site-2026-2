@@ -634,32 +634,44 @@ export default function AdminApplicationsPage() {
               
               if (applicableTeams.length === 0) return null;
               
-              // Get systems for the applicable teams
-              const applicableSystems = applicableTeams.flatMap(team => 
-                TEAM_SYSTEMS[team as Team]?.map(s => s.value) || []
-              );
-              const uniqueSystems = [...new Set(applicableSystems)];
+              // Build systems grouped by team
+              const systemsByTeam = applicableTeams.map(team => ({
+                team,
+                systems: TEAM_SYSTEMS[team as Team]?.map(s => s.value) || []
+              })).filter(t => t.systems.length > 0);
               
-              if (uniqueSystems.length === 0) return null;
+              if (systemsByTeam.length === 0) return null;
+              
+              // If only one team, show systems without team prefix
+              const showTeamPrefix = applicableTeams.length > 1;
               
               return (
                 <>
                   <div className="text-xs text-neutral-500 mb-1 mt-3">System</div>
-                  <div className="flex flex-wrap gap-1">
-                    {uniqueSystems.map(system => (
-                      <button
-                        key={system}
-                        onClick={() => setSystemFilters(prev => 
-                          prev.includes(system) ? prev.filter(s => s !== system) : [...prev, system]
+                  <div className="space-y-2">
+                    {systemsByTeam.map(({ team, systems }) => (
+                      <div key={team}>
+                        {showTeamPrefix && (
+                          <div className="text-[10px] text-neutral-600 mb-1 uppercase tracking-wider">{team}</div>
                         )}
-                        className={`px-2 py-1 text-xs rounded-md border transition-colors ${
-                          systemFilters.includes(system)
-                            ? 'bg-blue-500/20 border-blue-500/50 text-blue-400'
-                            : 'bg-neutral-800 border-white/10 text-neutral-400 hover:border-white/20'
-                        }`}
-                      >
-                        {system}
-                      </button>
+                        <div className="flex flex-wrap gap-1">
+                          {systems.map(system => (
+                            <button
+                              key={`${team}-${system}`}
+                              onClick={() => setSystemFilters(prev => 
+                                prev.includes(system) ? prev.filter(s => s !== system) : [...prev, system]
+                              )}
+                              className={`px-2 py-1 text-xs rounded-md border transition-colors ${
+                                systemFilters.includes(system)
+                                  ? 'bg-blue-500/20 border-blue-500/50 text-blue-400'
+                                  : 'bg-neutral-800 border-white/10 text-neutral-400 hover:border-white/20'
+                              }`}
+                            >
+                              {system}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                     ))}
                   </div>
                 </>
