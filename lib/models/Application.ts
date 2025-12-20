@@ -12,6 +12,7 @@ export enum ApplicationStatus {
 // Calendar event status tracking
 export enum InterviewEventStatus {
   PENDING = "pending",           // Offer extended, not scheduled
+  SCHEDULING = "scheduling",     // Reservation in progress (optimistic lock)
   SCHEDULED = "scheduled",       // Calendar event created
   CANCELLED = "cancelled",       // Event cancelled by either party
   COMPLETED = "completed",       // Interview took place

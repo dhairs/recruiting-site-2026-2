@@ -213,6 +213,12 @@ export default function InterviewScheduler({
         text: "text-yellow-400",
         label: "Awaiting Scheduling",
       },
+      [InterviewEventStatus.SCHEDULING]: {
+        bg: "bg-cyan-500/10",
+        border: "border-cyan-500/20",
+        text: "text-cyan-400",
+        label: "Scheduling...",
+      },
       [InterviewEventStatus.SCHEDULED]: {
         bg: "bg-green-500/10",
         border: "border-green-500/20",

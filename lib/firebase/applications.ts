@@ -542,6 +542,147 @@ export async function updateInterviewOfferStatus(
 }
 
 /**
+ * Reserve an interview slot atomically (optimistic locking).
+ * Sets status to SCHEDULING to prevent concurrent booking attempts.
+ * Returns the reservation or throws if already scheduled/scheduling.
+ */
+export async function reserveInterviewSlot(
+  applicationId: string,
+  system: string,
+  scheduledAt: Date,
+  scheduledEndAt: Date
+): Promise<Application> {
+  const applicationRef = adminDb.collection(APPLICATIONS_COLLECTION).doc(applicationId);
+
+  return await adminDb.runTransaction(async (transaction) => {
+    const doc = await transaction.get(applicationRef);
+
+    if (!doc.exists) {
+      throw new Error("Application not found");
+    }
+
+    const data = doc.data()!;
+    const offers = normalizeInterviewOffers(data.interviewOffers) || [];
+    const offerIndex = offers.findIndex((o) => o.system === system);
+
+    if (offerIndex === -1) {
+      throw new Error(`No interview offer found for system: ${system}`);
+    }
+
+    const offer = offers[offerIndex];
+
+    // Check if already scheduled or currently being scheduled
+    if (offer.status === InterviewEventStatus.SCHEDULED) {
+      throw new Error("Interview is already scheduled. Cancel it first to reschedule.");
+    }
+
+    if (offer.status === InterviewEventStatus.SCHEDULING) {
+      throw new Error("Another scheduling attempt is in progress. Please try again.");
+    }
+
+    // Set status to SCHEDULING (acquire the lock)
+    const updatedOffer: InterviewOffer = {
+      ...offer,
+      status: InterviewEventStatus.SCHEDULING,
+      scheduledAt,
+      scheduledEndAt,
+      scheduledOnDate: new Date(),
+    };
+
+    const updatedOffers = [...offers];
+    updatedOffers[offerIndex] = updatedOffer;
+
+    transaction.update(applicationRef, {
+      interviewOffers: updatedOffers.map(prepareOfferForFirestore),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+
+    return {
+      ...data,
+      id: doc.id,
+      interviewOffers: updatedOffers,
+      createdAt: data.createdAt?.toDate() || new Date(),
+      updatedAt: new Date(),
+      submittedAt: data.submittedAt?.toDate(),
+    } as Application;
+  });
+}
+
+/**
+ * Confirm an interview reservation after calendar event is created.
+ * Finalizes the reservation by setting status to SCHEDULED with event details.
+ */
+export async function confirmInterviewReservation(
+  applicationId: string,
+  system: string,
+  eventId: string
+): Promise<Application | null> {
+  return updateInterviewOfferStatus(applicationId, system, {
+    status: InterviewEventStatus.SCHEDULED,
+    eventId,
+  });
+}
+
+/**
+ * Rollback a failed interview reservation.
+ * Resets status back to PENDING if calendar event creation failed.
+ */
+export async function rollbackInterviewReservation(
+  applicationId: string,
+  system: string
+): Promise<Application | null> {
+  const applicationRef = adminDb.collection(APPLICATIONS_COLLECTION).doc(applicationId);
+
+  return await adminDb.runTransaction(async (transaction) => {
+    const doc = await transaction.get(applicationRef);
+
+    if (!doc.exists) {
+      return null;
+    }
+
+    const data = doc.data()!;
+    const offers = normalizeInterviewOffers(data.interviewOffers) || [];
+    const offerIndex = offers.findIndex((o) => o.system === system);
+
+    if (offerIndex === -1) {
+      return null;
+    }
+
+    const offer = offers[offerIndex];
+
+    // Only rollback if still in SCHEDULING status
+    if (offer.status !== InterviewEventStatus.SCHEDULING) {
+      return null;
+    }
+
+    const updatedOffer: InterviewOffer = {
+      ...offer,
+      status: InterviewEventStatus.PENDING,
+      scheduledAt: undefined,
+      scheduledEndAt: undefined,
+      scheduledOnDate: undefined,
+    };
+
+    const updatedOffers = [...offers];
+    updatedOffers[offerIndex] = updatedOffer;
+
+    transaction.update(applicationRef, {
+      interviewOffers: updatedOffers.map(prepareOfferForFirestore),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+
+    return {
+      ...data,
+      id: doc.id,
+      interviewOffers: updatedOffers,
+      createdAt: data.createdAt?.toDate() || new Date(),
+      updatedAt: new Date(),
+      submittedAt: data.submittedAt?.toDate(),
+    } as Application;
+  });
+}
+
+/**
  * Reject an applicant from specific systems atomically.
  * Removes interview offers for the specified systems and updates rejectedBySystems.
  * If no interview offers remain, sets status to REJECTED.

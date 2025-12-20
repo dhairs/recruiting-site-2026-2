@@ -3,6 +3,9 @@ import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import {
   getApplication,
   updateInterviewOfferStatus,
+  reserveInterviewSlot,
+  confirmInterviewReservation,
+  rollbackInterviewReservation,
 } from "@/lib/firebase/applications";
 import {
   ApplicationStatus,
@@ -162,36 +165,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    // Verify the offer exists
-    const offers = application.interviewOffers || [];
-    const offer = offers.find((o) => o.system === system);
-
-    if (!offer) {
-      return NextResponse.json(
-        { error: `No interview offer found for system: ${system}` },
-        { status: 400 }
-      );
-    }
-
-    // Check if already scheduled (but allow rescheduling cancelled interviews)
-    if (offer.status === InterviewEventStatus.SCHEDULED) {
-      return NextResponse.json(
-        { error: "Interview is already scheduled. Cancel it first to reschedule." },
-        { status: 400 }
-      );
-    }
-
-    // For Combustion/Electric, verify this is the selected system
-    if (application.team !== Team.SOLAR && offers.length > 1) {
-      if (application.selectedInterviewSystem !== system) {
-        return NextResponse.json(
-          { error: "Must select this system first before scheduling" },
-          { status: 400 }
-        );
-      }
-    }
-
-    // Get interview config
+    // Get interview config before attempting reservation
     const config = await getInterviewConfig(application.team, system);
     if (!config) {
       return NextResponse.json(
@@ -209,23 +183,59 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    // Create calendar event
-    const eventId = await createInterviewEvent(
-      config,
-      system,
-      userInfo.email,
-      userInfo.name,
-      startDate,
-      endDate
-    );
+    // Verify the offer exists and check prerequisites
+    const offers = application.interviewOffers || [];
+    const offer = offers.find((o) => o.system === system);
 
-    // Update the interview offer status
-    const updatedApplication = await updateInterviewOfferStatus(id, system, {
-      status: InterviewEventStatus.SCHEDULED,
-      eventId,
-      scheduledAt: startDate,
-      scheduledEndAt: endDate,
-    });
+    if (!offer) {
+      return NextResponse.json(
+        { error: `No interview offer found for system: ${system}` },
+        { status: 400 }
+      );
+    }
+
+    // For Combustion/Electric, verify this is the selected system
+    if (application.team !== Team.SOLAR && offers.length > 1) {
+      if (application.selectedInterviewSystem !== system) {
+        return NextResponse.json(
+          { error: "Must select this system first before scheduling" },
+          { status: 400 }
+        );
+      }
+    }
+
+    // STEP 1: Atomically reserve the slot (acquire lock)
+    // This prevents concurrent requests from double-booking
+    let reservedApplication: Awaited<ReturnType<typeof reserveInterviewSlot>>;
+    try {
+      reservedApplication = await reserveInterviewSlot(id, system, startDate, endDate);
+    } catch (reserveError) {
+      // If reservation fails (already scheduled or in progress), return error
+      const message = reserveError instanceof Error ? reserveError.message : "Failed to reserve slot";
+      return NextResponse.json({ error: message }, { status: 409 });
+    }
+
+    // STEP 2: Create calendar event (external API call)
+    let eventId: string;
+    try {
+      eventId = await createInterviewEvent(
+        config,
+        system,
+        userInfo.email,
+        userInfo.name,
+        startDate,
+        endDate
+      );
+    } catch (calendarError) {
+      // Calendar creation failed - rollback the reservation
+      logger.error({ err: calendarError }, "Calendar event creation failed, rolling back reservation");
+      await rollbackInterviewReservation(id, system);
+      const message = calendarError instanceof Error ? calendarError.message : "Failed to create calendar event";
+      return NextResponse.json({ error: message }, { status: 500 });
+    }
+
+    // STEP 3: Confirm the reservation with the event ID
+    const updatedApplication = await confirmInterviewReservation(id, system, eventId);
 
     // Auto-decline other pending interview offers (NOT for Solar - they can interview with multiple systems)
     // When an applicant schedules with one system (Electric/Combustion), cancel offers from other systems
