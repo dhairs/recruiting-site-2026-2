@@ -47,7 +47,7 @@ export async function PATCH(
     const { role, team, system, isMember } = body;
     const { uid: targetUid } = await params;
 
-    const updateData: any = {};
+    const updateData: Record<string, unknown> = {};
     
     if (role) {
         // Only Admins can update roles

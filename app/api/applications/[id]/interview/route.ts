@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { getApplication, selectInterviewSystem } from "@/lib/firebase/applications";
+import { getRecruitingConfig } from "@/lib/firebase/config";
 import { ApplicationStatus, InterviewEventStatus } from "@/lib/models/Application";
 import { Team } from "@/lib/models/User";
 import { InterviewSlotConfig } from "@/lib/models/Interview";
 import { getAvailableSlots } from "@/lib/google/calendar";
+import { getUserVisibleStatus } from "@/lib/utils/statusUtils";
 import pino from "pino";
 
 const logger = pino();
@@ -93,8 +95,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    // Check if application is in interview status
-    if (application.status !== ApplicationStatus.INTERVIEW) {
+    // Check if application should show interview UI based on effective status
+    const config = await getRecruitingConfig();
+    const effectiveStatus = getUserVisibleStatus(application, config.currentStep);
+    
+    if (effectiveStatus !== ApplicationStatus.INTERVIEW) {
       return NextResponse.json(
         { error: "Application is not in interview stage" },
         { status: 400 }
@@ -131,6 +136,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           const config = await getInterviewConfig(application.team, offer.system);
           if (!config) {
             return { ...offer, availableSlots: [], configMissing: true };
+          }
+
+          // Check if calendar ID is configured - if not, config is still being set up
+          if (!config.calendarId) {
+            return { ...offer, availableSlots: [], configPending: true };
           }
 
           // Get slots for next 2 weeks
@@ -190,8 +200,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    // Check if application is in interview status
-    if (application.status !== ApplicationStatus.INTERVIEW) {
+    // Check if application should show interview UI based on effective status
+    const config = await getRecruitingConfig();
+    const effectiveStatus = getUserVisibleStatus(application, config.currentStep);
+    
+    if (effectiveStatus !== ApplicationStatus.INTERVIEW) {
       return NextResponse.json(
         { error: "Application is not in interview stage" },
         { status: 400 }

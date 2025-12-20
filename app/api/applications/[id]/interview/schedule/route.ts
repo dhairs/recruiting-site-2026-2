@@ -3,6 +3,12 @@ import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import {
   getApplication,
   updateInterviewOfferStatus,
+  reserveInterviewSlot,
+  confirmInterviewReservation,
+  rollbackInterviewReservation,
+  acquireCalendarSlotLock,
+  confirmCalendarSlotLock,
+  releaseCalendarSlotLock,
 } from "@/lib/firebase/applications";
 import {
   ApplicationStatus,
@@ -10,6 +16,7 @@ import {
 } from "@/lib/models/Application";
 import { Team } from "@/lib/models/User";
 import { InterviewSlotConfig } from "@/lib/models/Interview";
+import { RecruitingStep, RecruitingConfig } from "@/lib/models/Config";
 import {
   createInterviewEvent,
   cancelInterviewEvent,
@@ -19,6 +26,22 @@ import pino from "pino";
 const logger = pino();
 const INTERVIEW_CONFIGS_COLLECTION = "interviewConfigs";
 const USERS_COLLECTION = "users";
+const RECRUITING_CONFIG_COLLECTION = "config";
+
+/**
+ * Check if interview scheduling is still allowed based on recruiting step
+ */
+async function isInterviewSchedulingAllowed(): Promise<boolean> {
+  const doc = await adminDb.collection(RECRUITING_CONFIG_COLLECTION).doc("recruiting").get();
+  if (!doc.exists) return true; // Default to allowed if no config
+  const config = doc.data() as RecruitingConfig;
+  const blockedSteps = [
+    RecruitingStep.RELEASE_TRIAL,
+    RecruitingStep.TRIAL_WORKDAY,
+    RecruitingStep.RELEASE_DECISIONS,
+  ];
+  return !blockedSteps.includes(config.currentStep as RecruitingStep);
+}
 
 /**
  * Helper to get the current user's UID from the session cookie
@@ -141,6 +164,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
+    // Check if interview scheduling is still allowed (blocked after trial release)
+    const schedulingAllowed = await isInterviewSchedulingAllowed();
+    if (!schedulingAllowed) {
+      return NextResponse.json(
+        { error: "Interview scheduling is no longer available. Trial workdays have been released." },
+        { status: 400 }
+      );
+    }
+
     const body = await request.json();
     const { system, slotStart, slotEnd } = body;
 
@@ -162,36 +194,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    // Verify the offer exists
-    const offers = application.interviewOffers || [];
-    const offer = offers.find((o) => o.system === system);
-
-    if (!offer) {
-      return NextResponse.json(
-        { error: `No interview offer found for system: ${system}` },
-        { status: 400 }
-      );
-    }
-
-    // Check if already scheduled (but allow rescheduling cancelled interviews)
-    if (offer.status === InterviewEventStatus.SCHEDULED) {
-      return NextResponse.json(
-        { error: "Interview is already scheduled. Cancel it first to reschedule." },
-        { status: 400 }
-      );
-    }
-
-    // For Combustion/Electric, verify this is the selected system
-    if (application.team !== Team.SOLAR && offers.length > 1) {
-      if (application.selectedInterviewSystem !== system) {
-        return NextResponse.json(
-          { error: "Must select this system first before scheduling" },
-          { status: 400 }
-        );
-      }
-    }
-
-    // Get interview config
+    // Get interview config before attempting reservation
     const config = await getInterviewConfig(application.team, system);
     if (!config) {
       return NextResponse.json(
@@ -209,23 +212,109 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    // Create calendar event
-    const eventId = await createInterviewEvent(
-      config,
-      system,
-      userInfo.email,
-      userInfo.name,
-      startDate,
-      endDate
-    );
+    // Verify the offer exists and check prerequisites
+    const offers = application.interviewOffers || [];
+    const offer = offers.find((o) => o.system === system);
 
-    // Update the interview offer status
-    const updatedApplication = await updateInterviewOfferStatus(id, system, {
-      status: InterviewEventStatus.SCHEDULED,
-      eventId,
-      scheduledAt: startDate,
-      scheduledEndAt: endDate,
-    });
+    if (!offer) {
+      return NextResponse.json(
+        { error: `No interview offer found for system: ${system}` },
+        { status: 400 }
+      );
+    }
+
+    // For Combustion/Electric, verify this is the selected system
+    if (application.team !== Team.SOLAR && offers.length > 1) {
+      if (application.selectedInterviewSystem !== system) {
+        return NextResponse.json(
+          { error: "Must select this system first before scheduling" },
+          { status: 400 }
+        );
+      }
+    }
+
+    // STEP 1: Acquire calendar slot lock (prevents double-booking across shared calendars)
+    // This must happen FIRST, before the application-level lock
+    try {
+      await acquireCalendarSlotLock(
+        config.calendarId,
+        startDate,
+        endDate,
+        id,
+        system
+      );
+      logger.info({ applicationId: id, calendarId: config.calendarId, slot: startDate.toISOString() }, "Acquired calendar slot lock");
+    } catch (slotLockError) {
+      const message = slotLockError instanceof Error ? slotLockError.message : "Failed to reserve slot";
+      return NextResponse.json({ error: message }, { status: 409 });
+    }
+
+    // STEP 2: Atomically reserve the application's interview offer (acquire offer lock)
+    // This prevents the same applicant from double-booking the same offer
+    let reservedApplication: Awaited<ReturnType<typeof reserveInterviewSlot>>;
+    try {
+      reservedApplication = await reserveInterviewSlot(id, system, startDate, endDate);
+    } catch (reserveError) {
+      // Application reservation failed - release the calendar slot lock
+      logger.error({ err: reserveError }, "Application reservation failed, releasing calendar slot lock");
+      await releaseCalendarSlotLock(config.calendarId, startDate, id);
+      const message = reserveError instanceof Error ? reserveError.message : "Failed to reserve slot";
+      return NextResponse.json({ error: message }, { status: 409 });
+    }
+
+    // STEP 3: Create calendar event (external API call)
+    let eventId: string;
+    try {
+      eventId = await createInterviewEvent(
+        config,
+        system,
+        userInfo.email,
+        userInfo.name,
+        startDate,
+        endDate
+      );
+    } catch (calendarError) {
+      // Calendar creation failed - rollback both locks
+      logger.error({ err: calendarError }, "Calendar event creation failed, rolling back reservations");
+      await rollbackInterviewReservation(id, system);
+      await releaseCalendarSlotLock(config.calendarId, startDate, id);
+      const message = calendarError instanceof Error ? calendarError.message : "Failed to create calendar event";
+      return NextResponse.json({ error: message }, { status: 500 });
+    }
+
+    // STEP 4: Confirm both locks with the event ID
+    const updatedApplication = await confirmInterviewReservation(id, system, eventId);
+    await confirmCalendarSlotLock(config.calendarId, startDate, eventId);
+
+    // Auto-decline other pending interview offers (NOT for Solar - they can interview with multiple systems)
+    // When an applicant schedules with one system (Electric/Combustion), cancel offers from other systems
+    let declinedOffers: string[] = [];
+    
+    if (application.team !== Team.SOLAR) {
+      const otherOffers = offers.filter(
+        (o) => o.system !== system && o.status === InterviewEventStatus.PENDING
+      );
+      
+      for (const otherOffer of otherOffers) {
+        try {
+          await updateInterviewOfferStatus(id, otherOffer.system, {
+            status: InterviewEventStatus.CANCELLED,
+            cancelReason: `Applicant chose to interview with ${system}`,
+          });
+          declinedOffers.push(otherOffer.system);
+          logger.info(
+            { applicationId: id, declinedSystem: otherOffer.system, chosenSystem: system },
+            "Auto-declined interview offer"
+          );
+        } catch (err) {
+          logger.error(
+            { err, applicationId: id, system: otherOffer.system },
+            "Failed to auto-decline interview offer"
+          );
+          // Continue - don't fail the whole request if one decline fails
+        }
+      }
+    }
 
     return NextResponse.json({
       success: true,
@@ -233,6 +322,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       scheduledAt: startDate.toISOString(),
       scheduledEndAt: endDate.toISOString(),
       application: updatedApplication,
+      declinedOffers,
     });
   } catch (error) {
     logger.error({ err: error }, "Failed to schedule interview");
@@ -317,6 +407,17 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     } catch (calendarError) {
       logger.error({ err: calendarError }, "Failed to cancel calendar event");
       // Continue anyway - the event might have been manually deleted
+    }
+
+    // Release the calendar slot lock so others can book this time
+    if (offer.scheduledAt) {
+      try {
+        await releaseCalendarSlotLock(config.calendarId, offer.scheduledAt, id);
+        logger.info({ applicationId: id, calendarId: config.calendarId }, "Released calendar slot lock");
+      } catch (lockError) {
+        logger.error({ err: lockError }, "Failed to release calendar slot lock");
+        // Continue anyway - the slot will be marked as cancelled in the offer
+      }
     }
 
     // Update the interview offer status

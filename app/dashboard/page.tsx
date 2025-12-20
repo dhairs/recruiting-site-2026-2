@@ -23,12 +23,6 @@ function getStatusBadge(status: ApplicationStatus, isApplicationsOpen: boolean) 
       text: "text-blue-400",
       label: "Submitted",
     },
-    [ApplicationStatus.UNDER_REVIEW]: {
-      bg: "bg-purple-500/10",
-      border: "border-purple-500/20",
-      text: "text-purple-400",
-      label: "Under Review",
-    },
     [ApplicationStatus.INTERVIEW]: {
       bg: "bg-cyan-500/10",
       border: "border-cyan-500/20",
@@ -85,7 +79,124 @@ function getStatusBadge(status: ApplicationStatus, isApplicationsOpen: boolean) 
 
 import { RecruitingStep } from "@/lib/models/Config";
 
-// ... existing imports ...
+// Trial Offer Response Component
+function TrialOfferResponse({ 
+  applicationId, 
+  system, 
+  onResponse 
+}: { 
+  applicationId: string; 
+  system: string; 
+  onResponse: () => void;
+}) {
+  const [loading, setLoading] = useState(false);
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [rejectionReason, setRejectionReason] = useState("");
+
+  const handleAccept = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/applications/${applicationId}/trial/respond`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ accepted: true }),
+      });
+      if (res.ok) {
+        toast.success("Trial workday accepted!");
+        onResponse();
+      } else {
+        const data = await res.json();
+        toast.error(data.error || "Failed to accept");
+      }
+    } catch (e) {
+      toast.error("Failed to accept trial workday");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleReject = async () => {
+    if (!rejectionReason.trim()) {
+      toast.error("Please provide a reason for declining");
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/applications/${applicationId}/trial/respond`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ accepted: false, rejectionReason }),
+      });
+      if (res.ok) {
+        toast.success("Response recorded");
+        setShowRejectModal(false);
+        onResponse();
+      } else {
+        const data = await res.json();
+        toast.error(data.error || "Failed to submit response");
+      }
+    } catch (e) {
+      toast.error("Failed to submit response");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <>
+      <div className="flex gap-3">
+        <button
+          onClick={handleAccept}
+          disabled={loading}
+          className="flex-1 py-2 px-4 rounded-lg bg-green-600 text-white font-medium hover:bg-green-500 transition-colors disabled:opacity-50"
+        >
+          {loading ? "..." : "Accept"}
+        </button>
+        <button
+          onClick={() => setShowRejectModal(true)}
+          disabled={loading}
+          className="flex-1 py-2 px-4 rounded-lg bg-neutral-700 text-white font-medium hover:bg-neutral-600 transition-colors disabled:opacity-50"
+        >
+          Decline
+        </button>
+      </div>
+
+      {/* Rejection Reason Modal */}
+      {showRejectModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-neutral-900 border border-white/10 rounded-2xl p-6 max-w-md w-full mx-4 shadow-2xl">
+            <h3 className="text-xl font-bold text-white mb-2">Decline Trial Workday</h3>
+            <p className="text-neutral-400 text-sm mb-4">
+              Please let us know why you're declining the {system} trial workday.
+            </p>
+            <textarea
+              value={rejectionReason}
+              onChange={(e) => setRejectionReason(e.target.value)}
+              placeholder="e.g., Schedule conflict, accepted another offer, etc."
+              className="w-full h-24 p-3 rounded-lg bg-black border border-white/10 text-white placeholder-neutral-500 focus:outline-none focus:border-purple-500 mb-4"
+            />
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowRejectModal(false)}
+                disabled={loading}
+                className="flex-1 py-2 rounded-lg bg-neutral-800 text-white font-medium hover:bg-neutral-700 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleReject}
+                disabled={loading || !rejectionReason.trim()}
+                className="flex-1 py-2 rounded-lg bg-red-600 text-white font-medium hover:bg-red-500 transition-colors disabled:opacity-50"
+              >
+                {loading ? "Submitting..." : "Submit"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
 
 function DashboardContent() {
   const searchParams = useSearchParams();
@@ -270,11 +381,11 @@ function DashboardContent() {
                               <h3 className="font-medium text-white">
                                 {teamInfo?.name} Application
                               </h3>
-                              {app.preferredSystem && (
+                              {app.preferredSystems?.length ? (
                                 <p className="text-xs text-neutral-500">
-                                  Preferred: {app.preferredSystem}
+                                  Preferred: {app.preferredSystems.join(", ")}
                                 </p>
-                              )}
+                              ) : null}
                             </div>
                           </div>
                           <div className="flex items-center gap-3">
@@ -296,10 +407,12 @@ function DashboardContent() {
               )}
             </div>
 
-            {/* Interview Scheduling Section */}
+            {/* Interview Scheduling Section - only show before trial release */}
             {applications.some(
               (app) => app.status === ApplicationStatus.INTERVIEW
-            ) && (
+            ) && recruitingStep !== RecruitingStep.RELEASE_TRIAL && 
+               recruitingStep !== RecruitingStep.TRIAL_WORKDAY &&
+               recruitingStep !== RecruitingStep.RELEASE_DECISIONS && (
               <div className="space-y-4">
                 {applications
                   .filter((app) => app.status === ApplicationStatus.INTERVIEW)
@@ -317,6 +430,67 @@ function DashboardContent() {
                       }}
                     />
                   ))}
+              </div>
+            )}
+
+            {/* Trial Workday Section - show after trial release */}
+            {(recruitingStep === RecruitingStep.RELEASE_TRIAL || 
+              recruitingStep === RecruitingStep.TRIAL_WORKDAY ||
+              recruitingStep === RecruitingStep.RELEASE_DECISIONS) &&
+              applications.some((app) => app.trialOffers && app.trialOffers.length > 0) && (
+              <div className="p-6 rounded-2xl bg-neutral-900 border border-white/5">
+                <h2 className="text-xl font-bold text-white mb-4">
+                  🎉 Trial Workday Invite
+                </h2>
+                {applications
+                  .filter((app) => app.trialOffers && app.trialOffers.length > 0)
+                  .map((app) => {
+                    const trialOffer = app.trialOffers![0];
+                    const teamInfo = TEAM_INFO.find((t) => t.team === app.team);
+                    const hasResponded = trialOffer.accepted !== undefined;
+                    
+                    return (
+                      <div 
+                        key={app.id}
+                        className="p-4 rounded-lg bg-black/50 border border-purple-500/20"
+                      >
+                        <div className="flex items-center gap-3 mb-4">
+                          <span className="text-2xl">{teamInfo?.icon}</span>
+                          <div>
+                            <h3 className="font-medium text-white">
+                              {teamInfo?.name} - {trialOffer.system}
+                            </h3>
+                            <p className="text-sm text-neutral-400">
+                              Trial Workday Invitation
+                            </p>
+                          </div>
+                        </div>
+                        
+                        {hasResponded ? (
+                          <div className={`p-3 rounded-lg ${trialOffer.accepted ? 'bg-green-500/10 border border-green-500/20' : 'bg-red-500/10 border border-red-500/20'}`}>
+                            <p className={`text-sm font-medium ${trialOffer.accepted ? 'text-green-400' : 'text-red-400'}`}>
+                              {trialOffer.accepted ? '✅ You accepted this trial workday' : '❌ You declined this trial workday'}
+                            </p>
+                            {trialOffer.rejectionReason && (
+                              <p className="text-xs text-neutral-400 mt-1">
+                                Reason: {trialOffer.rejectionReason}
+                              </p>
+                            )}
+                          </div>
+                        ) : (
+                          <TrialOfferResponse 
+                            applicationId={app.id} 
+                            system={trialOffer.system}
+                            onResponse={() => {
+                              fetch("/api/applications")
+                                .then((res) => res.json())
+                                .then((data) => setApplications(data.applications || []));
+                            }}
+                          />
+                        )}
+                      </div>
+                    );
+                  })}
               </div>
             )}
 

@@ -2,11 +2,13 @@
 
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
-import { Application, ApplicationStatus } from "@/lib/models/Application";
-import { Team, User } from "@/lib/models/User";
+import { Application, ApplicationStatus, InterviewOffer } from "@/lib/models/Application";
+import { Team, User, UserRole } from "@/lib/models/User";
+import { TEAM_SYSTEMS } from "@/lib/models/teamQuestions";
 import { TEAM_INFO, TEAM_QUESTIONS } from "@/lib/models/teamQuestions";
 import { Note, ReviewTask } from "@/lib/models/ApplicationExtras";
 import { ScorecardConfig, ScorecardSubmission } from "@/lib/models/Scorecard";
+import { RecruitingStep } from "@/lib/models/Config";
 import { format } from "date-fns";
 import { 
   Search, 
@@ -34,18 +36,41 @@ function StatusBadge({ status }: { status: ApplicationStatus }) {
   const styles = {
     [ApplicationStatus.IN_PROGRESS]: "bg-yellow-500/10 text-yellow-400 border-yellow-500/20",
     [ApplicationStatus.SUBMITTED]: "bg-blue-500/10 text-blue-400 border-blue-500/20",
-    [ApplicationStatus.UNDER_REVIEW]: "bg-purple-500/10 text-purple-400 border-purple-500/20",
     [ApplicationStatus.INTERVIEW]: "bg-cyan-500/10 text-cyan-400 border-cyan-500/20",
     [ApplicationStatus.ACCEPTED]: "bg-green-500/10 text-green-400 border-green-500/20",
     [ApplicationStatus.REJECTED]: "bg-red-500/10 text-red-500 border-red-500/20",
     [ApplicationStatus.TRIAL]: "bg-purple-500/10 text-purple-400 border-purple-500/20",
   };
 
+  // Display labels for each status (title case)
+  const labels: Record<string, string> = {
+    [ApplicationStatus.IN_PROGRESS]: "In Progress",
+    [ApplicationStatus.SUBMITTED]: "Submitted",
+    [ApplicationStatus.INTERVIEW]: "Interview",
+    [ApplicationStatus.ACCEPTED]: "Accepted",
+    [ApplicationStatus.REJECTED]: "Rejected",
+    [ApplicationStatus.TRIAL]: "Trial",
+  };
+
   return (
     <span className={clsx("px-2.5 py-0.5 text-xs font-medium rounded-full border", styles[status])}>
-      {status.replace("_", " ").toUpperCase()}
+      {labels[status] || status}
     </span>
   );
+}
+
+// Helper to get status display label (title case)
+const STATUS_LABELS: Record<string, string> = {
+  [ApplicationStatus.IN_PROGRESS]: "In Progress",
+  [ApplicationStatus.SUBMITTED]: "Submitted",
+  [ApplicationStatus.INTERVIEW]: "Interview",
+  [ApplicationStatus.ACCEPTED]: "Accepted",
+  [ApplicationStatus.REJECTED]: "Rejected",
+  [ApplicationStatus.TRIAL]: "Trial",
+};
+
+function getStatusLabel(status: string): string {
+  return STATUS_LABELS[status] || status;
 }
 
 export default function AdminApplicationsPage() {
@@ -67,11 +92,62 @@ export default function AdminApplicationsPage() {
   const [newTaskDescription, setNewTaskDescription] = useState("");
   const [isAddingTask, setIsAddingTask] = useState(false);
 
+  // Current user state (for role-based behavior)
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+
+  // Interview offer modal state
+  const [showInterviewModal, setShowInterviewModal] = useState(false);
+  const [selectedInterviewSystems, setSelectedInterviewSystems] = useState<string[]>([]);
+
+  // Rejection modal state
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [selectedRejectSystems, setSelectedRejectSystems] = useState<string[]>([]);
+
+  // Edit application modal state
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editFormData, setEditFormData] = useState<{
+    team: Team;
+    preferredSystems: string[];
+    graduationYear: string;
+    major: string;
+  } | null>(null);
+  const [editSaving, setEditSaving] = useState(false);
+
   // Scorecard State
   const [scorecardConfig, setScorecardConfig] = useState<ScorecardConfig | null>(null);
   const [scorecardData, setScorecardData] = useState<Record<string, any>>({});
   const [scorecardLoading, setScorecardLoading] = useState(false);
   const [scorecardSaving, setScorecardSaving] = useState(false);
+  
+  // Multi-system scorecard state
+  const [selectedScorecardSystem, setSelectedScorecardSystem] = useState<string | null>(null);
+  const [allTeamSystems, setAllTeamSystems] = useState<string[]>([]);
+  const [systemsWithConfigs, setSystemsWithConfigs] = useState<string[]>([]);
+  const [isPrivilegedUser, setIsPrivilegedUser] = useState(false);
+  
+  // Aggregate scorecard state
+  const [scorecardAggregates, setScorecardAggregates] = useState<any>(null);
+  const [allScorecardSubmissions, setAllScorecardSubmissions] = useState<ScorecardSubmission[]>([]);
+
+  // Recruiting step state (determines whether to show interview or trial modal)
+  const [recruitingStep, setRecruitingStep] = useState<RecruitingStep | null>(null);
+  
+  // Trial offer modal state
+  const [showTrialModal, setShowTrialModal] = useState(false);
+  const [selectedTrialSystems, setSelectedTrialSystems] = useState<string[]>([]);
+
+  // Acceptance modal state
+  const [showAcceptModal, setShowAcceptModal] = useState(false);
+  const [acceptFormData, setAcceptFormData] = useState<{
+    system: string;
+    role: string;
+    details: string;
+  }>({ system: '', role: 'Member', details: '' });
+
+  // Interview detail modal state
+  const [showInterviewDetailModal, setShowInterviewDetailModal] = useState(false);
+  const [selectedInterviewOffer, setSelectedInterviewOffer] = useState<InterviewOffer | null>(null);
+  const [interviewStatusUpdating, setInterviewStatusUpdating] = useState(false);
 
   useEffect(() => {
     async function fetchApps() {
@@ -83,6 +159,18 @@ export default function AdminApplicationsPage() {
           if (data.applications?.length > 0) {
             setSelectedAppId(data.applications[0].id);
           }
+        }
+        // Fetch current user
+        const userRes = await fetch("/api/auth/me");
+        if (userRes.ok) {
+          const userData = await userRes.json();
+          setCurrentUser(userData.user);
+        }
+        // Fetch recruiting config
+        const configRes = await fetch("/api/admin/config/recruiting");
+        if (configRes.ok) {
+          const configData = await configRes.json();
+          setRecruitingStep(configData.config?.currentStep || null);
         }
       } catch (err) {
         console.error("Failed to fetch applications", err);
@@ -111,41 +199,298 @@ export default function AdminApplicationsPage() {
     // Reset scorecard state
     setScorecardConfig(null);
     setScorecardData({});
+    setSelectedScorecardSystem(null);
+    setAllTeamSystems([]);
+    setSystemsWithConfigs([]);
   }, [selectedAppId]);
 
-  // Fetch Scorecard Config only when tab is active
+  // Fetch Scorecard Config - only when not already loaded for this app/system
   useEffect(() => {
-    if (activeTab === "scorecard" && selectedAppId) {
+    // Only fetch if we don't have a config yet, or if system changed
+    const shouldFetch = activeTab === "scorecard" && 
+                        selectedAppId && 
+                        !scorecardConfig;
+    
+    if (shouldFetch) {
         setScorecardLoading(true);
-        fetch(`/api/admin/applications/${selectedAppId}/scorecard`)
+        const systemParam = selectedScorecardSystem ? `?system=${encodeURIComponent(selectedScorecardSystem)}` : '';
+        fetch(`/api/admin/applications/${selectedAppId}/scorecard${systemParam}`)
             .then(res => res.json())
             .then(data => {
                 setScorecardConfig(data.config);
                 if (data.submission) {
                     setScorecardData(data.submission.data);
+                } else {
+                    setScorecardData({});
                 }
+                // Set available systems data
+                if (data.allTeamSystems) {
+                    setAllTeamSystems(data.allTeamSystems);
+                }
+                if (data.systemsWithConfigs) {
+                    setSystemsWithConfigs(data.systemsWithConfigs);
+                }
+                if (data.currentSystem && !selectedScorecardSystem) {
+                    setSelectedScorecardSystem(data.currentSystem);
+                }
+                setIsPrivilegedUser(data.isPrivileged || false);
+                
+                // Set aggregate data
+                setScorecardAggregates(data.aggregates);
+                setAllScorecardSubmissions(data.allSubmissions || []);
             })
             .finally(() => setScorecardLoading(false));
     }
-  }, [activeTab, selectedAppId]);
+  }, [activeTab, selectedAppId, scorecardConfig, selectedScorecardSystem]);
 
+  // Handle system change - refetch when system is explicitly changed
+  const handleSystemChange = (newSystem: string) => {
+    setSelectedScorecardSystem(newSystem);
+    setScorecardData({}); // Reset data when switching
+    setScorecardConfig(null); // Clear config to trigger refetch
+  };
 
-  const handleStatusUpdate = async (status: ApplicationStatus) => {
+  // Open edit modal with current application data
+  const handleOpenEditModal = () => {
+    if (!selectedApp) return;
+    setEditFormData({
+      team: selectedApp.team,
+      preferredSystems: selectedApp.preferredSystems || [],
+      graduationYear: selectedApp.formData.graduationYear || "",
+      major: selectedApp.formData.major || "",
+    });
+    setShowEditModal(true);
+  };
+
+  // Save application edits
+  const handleSaveEdit = async () => {
+    if (!selectedAppId || !editFormData) return;
+    setEditSaving(true);
+    try {
+      const res = await fetch(`/api/admin/applications/${selectedAppId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          team: editFormData.team,
+          preferredSystems: editFormData.preferredSystems,
+          formData: {
+            graduationYear: editFormData.graduationYear,
+            major: editFormData.major,
+          }
+        }),
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        // Update local state
+        setApplications(prev => prev.map(a => 
+          a.id === selectedAppId 
+            ? { ...a, ...data.application, user: a.user } 
+            : a
+        ));
+        setShowEditModal(false);
+        toast.success("Application updated!");
+      } else {
+        const error = await res.json();
+        toast.error(error.error || "Failed to update application");
+      }
+    } catch (err) {
+      toast.error("Failed to update application");
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
+  const handleStatusUpdate = async (status: ApplicationStatus, systems?: string[], offer?: any) => {
     if (!selectedAppId) return;
     setStatusLoading(true);
     try {
         const res = await fetch(`/api/admin/applications/${selectedAppId}/status`, {
             method: "POST",
-            body: JSON.stringify({ status }),
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ status, systems, offer }),
         });
-        if (res.ok) {
-            // Update local state
-            setApplications(prev => prev.map(a => a.id === selectedAppId ? { ...a, status } : a));
+        const data = await res.json();
+        
+        if (res.ok && data.application) {
+            // Update local state with the full application data (includes interview offers)
+            setApplications(prev => prev.map(a => 
+              a.id === selectedAppId 
+                ? { ...a, ...data.application, user: a.user } 
+                : a
+            ));
+            toast.success(`Status updated to ${status.replace("_", " ")}`);
+            setShowInterviewModal(false);
+            setShowTrialModal(false);
+            setShowAcceptModal(false);
+        } else {
+            toast.error(data.error || "Failed to update status");
         }
     } catch (e) {
         console.error("Failed to update status", e);
+        toast.error("Failed to update status");
     } finally {
         setStatusLoading(false);
+    }
+  };
+
+  const handleAcceptSubmit = () => {
+    if (!acceptFormData.system) {
+        toast.error("Please select a system");
+        return;
+    }
+    handleStatusUpdate(ApplicationStatus.ACCEPTED, undefined, acceptFormData);
+  };
+
+  // Handle Advance button click - show modal for higher roles, auto-advance for reviewers
+  // When recruiting step is INTERVIEWING, show trial modal; otherwise show interview modal
+  // Handle Advance button click - show modal for higher roles, auto-advance for reviewers
+  // When recruiting step is INTERVIEWING, show trial modal; otherwise show interview modal
+  const handleAdvanceClick = () => {
+    if (!selectedApp) return;
+    
+    // Determine if we're in trial mode (recruitingStep is INTERVIEWING)
+    const isTrialMode = recruitingStep === RecruitingStep.INTERVIEWING;
+    const isDecisionMode = recruitingStep === RecruitingStep.RELEASE_TRIAL || 
+                          recruitingStep === RecruitingStep.TRIAL_WORKDAY || 
+                          recruitingStep === RecruitingStep.RELEASE_DECISIONS;
+
+    if (isDecisionMode) {
+      // Show acceptance modal
+      setAcceptFormData({
+        system: selectedApp.preferredSystems?.[0] || '',
+        role: 'Member',
+        details: ''
+      });
+      setShowAcceptModal(true);
+      return;
+    }
+    
+    // For Reviewers, auto-use their system
+    if (currentUser?.role === UserRole.REVIEWER) {
+      if (isTrialMode) {
+        handleStatusUpdate(ApplicationStatus.TRIAL);
+      } else {
+        handleStatusUpdate(ApplicationStatus.INTERVIEW);
+      }
+      return;
+    }
+    
+    // For higher roles, show modal to select systems
+    if (isTrialMode) {
+      // Pre-select systems that already have trial offers
+      const existingOfferSystems = selectedApp.trialOffers?.map(o => o.system) || [];
+      setSelectedTrialSystems(existingOfferSystems);
+      setShowTrialModal(true);
+    } else {
+      // Pre-select systems that already have interview offers
+      const existingOfferSystems = selectedApp.interviewOffers?.map(o => o.system) || [];
+      setSelectedInterviewSystems(existingOfferSystems);
+      setShowInterviewModal(true);
+    }
+  };
+
+  // Get available systems for the selected application's team
+  const getTeamSystemOptions = () => {
+    if (!selectedApp) return [];
+    return TEAM_SYSTEMS[selectedApp.team as Team] || [];
+  };
+
+  // Handle Reject button click - show modal for selecting systems to reject
+  const handleRejectClick = () => {
+    if (!selectedApp) return;
+    
+    const isHigherAuthority = currentUser?.role === UserRole.ADMIN || 
+                               currentUser?.role === UserRole.TEAM_CAPTAIN_OB;
+    
+    // Get all systems with active interview offers
+    const existingOfferSystems = selectedApp.interviewOffers?.map(o => o.system) || [];
+    
+    if (isHigherAuthority) {
+      // Admin/Team Captain: pre-select all systems with offers
+      setSelectedRejectSystems(existingOfferSystems);
+    } else {
+      // System Lead/Reviewer: only pre-select their own system if it has an offer
+      const userSystem = currentUser?.memberProfile?.system;
+      if (userSystem && existingOfferSystems.includes(userSystem)) {
+        setSelectedRejectSystems([userSystem]);
+      } else {
+        setSelectedRejectSystems([]);
+      }
+    }
+    
+    setShowRejectModal(true);
+  };
+
+  // Handle rejection submission
+  const handleRejectSubmit = async () => {
+    if (!selectedAppId || selectedRejectSystems.length === 0) return;
+    setStatusLoading(true);
+    try {
+      const res = await fetch(`/api/admin/applications/${selectedAppId}/reject`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ systems: selectedRejectSystems }),
+      });
+      const data = await res.json();
+      
+      if (res.ok && data.application) {
+        setApplications(prev => prev.map(a => 
+          a.id === selectedAppId 
+            ? { ...a, ...data.application, user: a.user } 
+            : a
+        ));
+        toast.success(`Rejected from ${selectedRejectSystems.length} system(s)`);
+        setShowRejectModal(false);
+      } else {
+        toast.error(data.error || "Failed to reject");
+      }
+    } catch (e) {
+      console.error("Failed to reject", e);
+      toast.error("Failed to reject");
+    } finally {
+      setStatusLoading(false);
+    }
+  };
+
+  // Handle clicking on an interview offer to show details
+  const handleInterviewOfferClick = (offer: InterviewOffer) => {
+    setSelectedInterviewOffer(offer);
+    setShowInterviewDetailModal(true);
+  };
+
+  // Handle updating interview offer status
+  const handleUpdateInterviewStatus = async (newStatus: 'completed' | 'cancelled' | 'no_show', cancelReason?: string) => {
+    if (!selectedAppId || !selectedInterviewOffer) return;
+    setInterviewStatusUpdating(true);
+    try {
+      const res = await fetch(
+        `/api/admin/applications/${selectedAppId}/interview/${encodeURIComponent(selectedInterviewOffer.system)}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: newStatus, cancelReason }),
+        }
+      );
+      const data = await res.json();
+      
+      if (res.ok && data.application) {
+        setApplications(prev => prev.map(a => 
+          a.id === selectedAppId 
+            ? { ...a, ...data.application, user: a.user } 
+            : a
+        ));
+        toast.success(`Interview marked as ${newStatus.replace("_", " ")}`);
+        setShowInterviewDetailModal(false);
+        setSelectedInterviewOffer(null);
+      } else {
+        toast.error(data.error || "Failed to update interview status");
+      }
+    } catch (e) {
+      console.error("Failed to update interview status", e);
+      toast.error("Failed to update interview status");
+    } finally {
+      setInterviewStatusUpdating(false);
     }
   };
 
@@ -220,7 +565,11 @@ export default function AdminApplicationsPage() {
       try {
           await fetch(`/api/admin/applications/${selectedAppId}/scorecard`, {
               method: "POST",
-              body: JSON.stringify({ data: scorecardData }),
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ 
+                  data: scorecardData,
+                  system: selectedScorecardSystem 
+              }),
           });
           toast.success("Scorecard saved!");
       } finally {
@@ -232,7 +581,8 @@ export default function AdminApplicationsPage() {
     const matchesName = app.user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       app.user.email.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilters.length === 0 || statusFilters.includes(app.status);
-    const matchesSystem = systemFilters.length === 0 || (app.preferredSystem && systemFilters.includes(app.preferredSystem));
+    const appSystems = app.preferredSystems || [];
+    const matchesSystem = systemFilters.length === 0 || appSystems.some(s => systemFilters.includes(s));
     const matchesTeam = teamFilters.length === 0 || teamFilters.includes(app.team);
     return matchesName && matchesStatus && matchesSystem && matchesTeam;
   });
@@ -306,28 +656,60 @@ export default function AdminApplicationsPage() {
                       : 'bg-neutral-800 border-white/10 text-neutral-400 hover:border-white/20'
                   }`}
                 >
-                  {status.replace("_", " ").toUpperCase()}
+                  {getStatusLabel(status)}
                 </button>
               ))}
             </div>
-            <div className="text-xs text-neutral-500 mb-1 mt-3">System</div>
-            <div className="flex flex-wrap gap-1">
-              {[...new Set(applications.map(a => a.preferredSystem).filter(Boolean))].map(system => (
-                <button
-                  key={system}
-                  onClick={() => setSystemFilters(prev => 
-                    prev.includes(system!) ? prev.filter(s => s !== system) : [...prev, system!]
-                  )}
-                  className={`px-2 py-1 text-xs rounded-md border transition-colors ${
-                    systemFilters.includes(system!)
-                      ? 'bg-blue-500/20 border-blue-500/50 text-blue-400'
-                      : 'bg-neutral-800 border-white/10 text-neutral-400 hover:border-white/20'
-                  }`}
-                >
-                  {system}
-                </button>
-              ))}
-            </div>
+            {/* System filter: only show if teams are selected or there's only one team */}
+            {(() => {
+              const allTeams = [...new Set(applications.map(a => a.team))];
+              const applicableTeams = teamFilters.length > 0 ? teamFilters : (allTeams.length === 1 ? allTeams : []);
+              
+              if (applicableTeams.length === 0) return null;
+              
+              // Build systems grouped by team
+              const systemsByTeam = applicableTeams.map(team => ({
+                team,
+                systems: TEAM_SYSTEMS[team as Team]?.map(s => s.value) || []
+              })).filter(t => t.systems.length > 0);
+              
+              if (systemsByTeam.length === 0) return null;
+              
+              // If only one team, show systems without team prefix
+              const showTeamPrefix = applicableTeams.length > 1;
+              
+              return (
+                <>
+                  <div className="text-xs text-neutral-500 mb-1 mt-3">System</div>
+                  <div className="space-y-2">
+                    {systemsByTeam.map(({ team, systems }) => (
+                      <div key={team}>
+                        {showTeamPrefix && (
+                          <div className="text-[10px] text-neutral-600 mb-1 uppercase tracking-wider">{team}</div>
+                        )}
+                        <div className="flex flex-wrap gap-1">
+                          {systems.map(system => (
+                            <button
+                              key={`${team}-${system}`}
+                              onClick={() => setSystemFilters(prev => 
+                                prev.includes(system) ? prev.filter(s => s !== system) : [...prev, system]
+                              )}
+                              className={`px-2 py-1 text-xs rounded-md border transition-colors ${
+                                systemFilters.includes(system)
+                                  ? 'bg-blue-500/20 border-blue-500/50 text-blue-400'
+                                  : 'bg-neutral-800 border-white/10 text-neutral-400 hover:border-white/20'
+                              }`}
+                            >
+                              {system}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              );
+            })()}
             {(statusFilters.length > 0 || systemFilters.length > 0 || teamFilters.length > 0) && (
               <button
                 onClick={() => { setStatusFilters([]); setSystemFilters([]); setTeamFilters([]); }}
@@ -360,7 +742,7 @@ export default function AdminApplicationsPage() {
                     {app.team}
                   </span>
                   <span>•</span>
-                  <span>{app.preferredSystem || "General"}</span>
+                  <span>{(app.preferredSystems?.length ? app.preferredSystems.join(", ") : "General")}</span>
                 </div>
                 <StatusBadge status={app.status} />
              </div>
@@ -396,21 +778,33 @@ export default function AdminApplicationsPage() {
                           <span className="px-2 py-1 rounded bg-orange-500/10 text-orange-400 text-xs font-medium border border-orange-500/20">
                             {selectedApp.team} Team
                           </span>
-                           {selectedApp.preferredSystem && (
-                             <span className="px-2 py-1 rounded bg-blue-500/10 text-blue-400 text-xs font-medium border border-blue-500/20">
-                               {selectedApp.preferredSystem}
+                           {(selectedApp.preferredSystems?.length ?? 0) > 0 && selectedApp.preferredSystems!.map(sys => (
+                             <span key={sys} className="px-2 py-1 rounded bg-blue-500/10 text-blue-400 text-xs font-medium border border-blue-500/20">
+                               {sys}
                              </span>
-                           )}
+                           ))}
                         </div>
                       </div>
                     </div>
-                    <div className="flex gap-2">
-                      <button className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-white text-black text-sm font-medium hover:bg-neutral-200 transition-colors">
-                        <Mail className="h-4 w-4" /> Email
-                      </button>
-                      <button className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-neutral-800 text-white text-sm font-medium border border-white/10 hover:bg-neutral-700 transition-colors">
-                        <Edit className="h-4 w-4" /> Edit
-                      </button>
+                    <div className="flex items-center gap-4">
+                      {/* Email display */}
+                      <a 
+                        href={`mailto:${selectedApp.user.email}`}
+                        className="flex items-center gap-2 text-neutral-400 hover:text-white transition-colors text-sm"
+                      >
+                        <Mail className="h-4 w-4" />
+                        {selectedApp.user.email}
+                      </a>
+                      
+                      {/* Edit button - Admin only */}
+                      {currentUser?.role === UserRole.ADMIN && (
+                        <button 
+                          onClick={() => handleOpenEditModal()}
+                          className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-neutral-800 text-white text-sm font-medium border border-white/10 hover:bg-neutral-700 transition-colors"
+                        >
+                          <Edit className="h-4 w-4" /> Edit
+                        </button>
+                      )}
                     </div>
                  </div>
               </div>
@@ -466,8 +860,8 @@ export default function AdminApplicationsPage() {
                    </div>
                 )}
                 
-                {activeTab === "resume" && (
-                  <div className="flex flex-col h-full min-h-[600px]">
+                {/* Resume tab - always render but hide when not active to prevent iframe reload */}
+                <div className={clsx("flex flex-col h-full min-h-[600px]", activeTab !== "resume" && "hidden")}>
                     {selectedApp.formData.resumeUrl ? (
                       <>
                         <div className="flex justify-between items-center bg-neutral-900 border border-white/5 rounded-t-lg px-4 py-3">
@@ -494,13 +888,169 @@ export default function AdminApplicationsPage() {
                       </div>
                     )}
                   </div>
-                )}
 
                 {activeTab === "scorecard" && (
                    scorecardLoading ? <div className="text-neutral-500">Loading scorecard...</div> :
                    !scorecardConfig ? <div className="text-neutral-500">No scorecard configuration found for this team.</div> :
                    (
-                       <form onSubmit={handleScorecardSubmit} className="max-w-2xl space-y-6">
+                       <div className="max-w-2xl space-y-6">
+                           {/* System Selector for Privileged Users */}
+                           {isPrivilegedUser && allTeamSystems.length > 1 && (
+                               <div className="p-4 rounded-lg bg-neutral-900/50 border border-white/5">
+                                   <label className="block text-sm font-medium text-neutral-400 mb-2">
+                                       Select System Scorecard
+                                   </label>
+                                   <div className="flex flex-wrap gap-2">
+                                       {allTeamSystems.map(sys => {
+                                           const hasConfig = systemsWithConfigs.includes(sys);
+                                           const isSelected = selectedScorecardSystem === sys;
+                                           return (
+                                               <button
+                                                   key={sys}
+                                                   type="button"
+                                                   onClick={() => handleSystemChange(sys)}
+                                                   className={clsx(
+                                                       "px-3 py-1.5 text-sm rounded-lg border transition-colors",
+                                                       isSelected
+                                                           ? "bg-orange-500/20 border-orange-500 text-orange-400"
+                                                           : hasConfig
+                                                               ? "bg-neutral-800 border-white/10 text-white hover:border-white/20"
+                                                               : "bg-neutral-800/50 border-white/5 text-neutral-500"
+                                                   )}
+                                               >
+                                                   {sys}
+                                                   {hasConfig && !isSelected && (
+                                                       <span className="ml-1 text-xs text-green-400">●</span>
+                                                   )}
+                                               </button>
+                                           );
+                                       })}
+                                   </div>
+                                   <p className="text-xs text-neutral-600 mt-2">
+                                       <span className="text-green-400">●</span> indicates systems with configured scorecards
+                                   </p>
+                               </div>
+                           )}
+                           
+                           {/* Aggregate Scores Display */}
+                           {scorecardAggregates && scorecardAggregates.totalSubmissions > 0 && (
+                               <div className="p-4 rounded-lg bg-gradient-to-br from-orange-500/10 to-amber-500/5 border border-orange-500/20">
+                                   <div className="flex items-center justify-between mb-4">
+                                       <h3 className="text-white font-bold">Aggregate Scores</h3>
+                                       <span className="text-sm text-neutral-400">
+                                           {scorecardAggregates.totalSubmissions} reviewer{scorecardAggregates.totalSubmissions !== 1 ? 's' : ''}
+                                       </span>
+                                   </div>
+                                   
+                                   {/* Overall Weighted Average */}
+                                   {scorecardAggregates.overallWeightedAverage !== undefined && (
+                                       <div className="mb-4 p-3 bg-neutral-900/50 rounded-lg">
+                                           <div className="flex items-center justify-between">
+                                               <span className="text-sm text-neutral-400">Overall Weighted Average</span>
+                                               <span className="text-2xl font-bold text-orange-400">
+                                                   {scorecardAggregates.overallWeightedAverage.toFixed(2)}
+                                               </span>
+                                           </div>
+                                       </div>
+                                   )}
+                                   
+                                   {/* Individual Field Averages */}
+                                   <div className="space-y-3">
+                                       {scorecardAggregates.scores.map((score: any) => (
+                                           <div key={score.fieldId} className="flex items-center gap-4">
+                                               <div className="flex-1">
+                                                   <div className="flex items-center justify-between mb-1">
+                                                       <span className="text-sm text-white">{score.fieldLabel}</span>
+                                                       <div className="flex items-center gap-2">
+                                                           <span className="text-sm font-medium text-orange-400">
+                                                               {score.average.toFixed(2)}
+                                                           </span>
+                                                           <span className="text-xs text-neutral-500">
+                                                               / {score.max}
+                                                           </span>
+                                                           {score.weight && (
+                                                               <span className="text-xs text-neutral-600">
+                                                                   (w: {score.weight})
+                                                               </span>
+                                                           )}
+                                                       </div>
+                                                   </div>
+                                                   <div className="h-2 bg-neutral-800 rounded-full overflow-hidden">
+                                                       <div 
+                                                           className="h-full bg-gradient-to-r from-orange-500 to-amber-500 rounded-full transition-all"
+                                                           style={{ width: `${(score.average / score.max) * 100}%` }}
+                                                       />
+                                                   </div>
+                                               </div>
+                                           </div>
+                                       ))}
+                                   </div>
+                               </div>
+                           )}
+
+                           {/* Individual Reviewer Submissions */}
+                           {isPrivilegedUser && allScorecardSubmissions.length > 0 && (
+                               <div className="p-4 rounded-lg bg-neutral-900/50 border border-white/5">
+                                   <h3 className="text-white font-bold mb-4">Individual Submissions</h3>
+                                   <div className="space-y-3">
+                                       {allScorecardSubmissions.map((sub) => (
+                                           <div 
+                                               key={sub.id} 
+                                               className="p-3 bg-neutral-800/50 rounded-lg border border-white/5"
+                                           >
+                                               <div className="flex items-center justify-between mb-2">
+                                                   <span className="text-sm font-medium text-white">{sub.reviewerName}</span>
+                                                   <span className="text-xs text-neutral-500">
+                                                       {sub.updatedAt ? new Date(sub.updatedAt).toLocaleDateString() : ''}
+                                                   </span>
+                                               </div>
+                                               <div className="flex flex-wrap gap-2">
+                                                   {scorecardConfig.fields
+                                                       .filter(f => f.type === "rating")
+                                                       .map(field => {
+                                                           const value = sub.data[field.id];
+                                                           return (
+                                                               <div 
+                                                                   key={field.id}
+                                                                   className="px-2 py-1 bg-neutral-700/50 rounded text-xs"
+                                                               >
+                                                                   <span className="text-neutral-400">{field.label}: </span>
+                                                                   <span className="text-white font-medium">
+                                                                       {typeof value === 'number' ? value : '-'}
+                                                                   </span>
+                                                               </div>
+                                                           );
+                                                       })}
+                                                   {/* Boolean and text fields */}
+                                                   {scorecardConfig.fields
+                                                       .filter(f => f.type === "boolean")
+                                                       .map(field => {
+                                                           const value = sub.data[field.id];
+                                                           return (
+                                                               <div 
+                                                                   key={field.id}
+                                                                   className={clsx(
+                                                                       "px-2 py-1 rounded text-xs",
+                                                                       value === true ? "bg-green-500/20 text-green-400" :
+                                                                       value === false ? "bg-red-500/20 text-red-400" :
+                                                                       "bg-neutral-700/50 text-neutral-400"
+                                                                   )}
+                                                               >
+                                                                   {field.label}: {value === true ? 'Yes' : value === false ? 'No' : '-'}
+                                                               </div>
+                                                           );
+                                                       })}
+                                               </div>
+                                           </div>
+                                       ))}
+                                   </div>
+                               </div>
+                           )}
+                           
+                           {/* My Scorecard Form */}
+                           <div className="border-t border-white/5 pt-6">
+                               <h3 className="text-white font-bold mb-4">Your Scorecard</h3>
+                               <form onSubmit={handleScorecardSubmit} className="space-y-6">
                            {scorecardConfig.fields.map(field => (
                                <div key={field.id} className="p-4 rounded-lg bg-neutral-900 border border-white/5">
                                    <label className="block text-sm font-bold text-white mb-1">
@@ -591,6 +1141,8 @@ export default function AdminApplicationsPage() {
                                </button>
                            </div>
                        </form>
+                       </div>
+                       </div>
                    )
                 )}
               </div>
@@ -605,33 +1157,63 @@ export default function AdminApplicationsPage() {
                    <Clock className="h-4 w-4 text-neutral-500" />
                  </div>
                  
-                 {/* Progress Bar (Mock) */}
-                 <div className="flex justify-between items-center text-xs font-medium text-neutral-500 mb-2">
-                   <span className={clsx(true && "text-orange-500")}>Applied</span>
-                   <span className={clsx(selectedApp.status !== "in_progress" && "text-orange-500")}>Review</span>
-                   <span>Interview</span>
-                   <span>Offer</span>
-                 </div>
-                 <div className="h-1.5 bg-neutral-800 rounded-full overflow-hidden mb-6">
-                    <div className="h-full bg-orange-500 w-1/4"></div>
-                 </div>
+                 {/* Progress Bar - Dynamic based on status */}
+                 {(() => {
+                   const statusOrder = [
+                     ApplicationStatus.IN_PROGRESS,
+                     ApplicationStatus.SUBMITTED,
+                     ApplicationStatus.INTERVIEW,
+                     ApplicationStatus.TRIAL,
+                     ApplicationStatus.ACCEPTED,
+                   ];
+                   const currentIndex = statusOrder.indexOf(selectedApp.status);
+                   const isRejected = selectedApp.status === ApplicationStatus.REJECTED;
+                   const progressPercent = isRejected ? 0 : ((currentIndex + 1) / statusOrder.length) * 100;
+                   
+                   return (
+                     <>
+                       <div className="flex justify-between items-center text-xs font-medium text-neutral-500 mb-2">
+                         <span className={clsx(currentIndex >= 0 && "text-orange-500")}>Applied</span>
+                         <span className={clsx(currentIndex >= 1 && "text-orange-500")}>Review</span>
+                         <span className={clsx(currentIndex >= 2 && "text-orange-500")}>Interview</span>
+                         <span className={clsx(currentIndex >= 4 && "text-green-400")}>Offer</span>
+                       </div>
+                       <div className="h-1.5 bg-neutral-800 rounded-full overflow-hidden mb-6">
+                         <div 
+                           className={clsx(
+                             "h-full rounded-full transition-all",
+                             isRejected ? "bg-red-500" : currentIndex >= 4 ? "bg-green-500" : "bg-orange-500"
+                           )}
+                           style={{ width: isRejected ? '100%' : `${progressPercent}%` }}
+                         />
+                       </div>
+                     </>
+                   );
+                 })()}
 
-                 {/* Current State Dropdown Mock */}
-                 <div className="bg-neutral-800 rounded-lg p-3 text-sm text-white font-medium flex justify-between items-center mb-4">
-                    <span>{selectedApp.status.replace("_", " ").toUpperCase()}</span>
+                 {/* Current Status Display */}
+                 <div className={clsx(
+                   "rounded-lg p-3 text-sm font-medium flex justify-between items-center mb-4",
+                   selectedApp.status === ApplicationStatus.REJECTED 
+                     ? "bg-red-500/10 text-red-400 border border-red-500/20"
+                     : selectedApp.status === ApplicationStatus.ACCEPTED
+                       ? "bg-green-500/10 text-green-400 border border-green-500/20"
+                       : "bg-neutral-800 text-white"
+                 )}>
+                    <span>{getStatusLabel(selectedApp.status)}</span>
                  </div>
 
                  <div className="grid grid-cols-2 gap-3">
                    <button 
                      disabled={statusLoading}
-                     onClick={() => handleStatusUpdate(ApplicationStatus.REJECTED)}
+                     onClick={handleRejectClick}
                      className="flex items-center justify-center gap-2 py-2 rounded-lg bg-neutral-800 text-white text-sm font-medium hover:bg-neutral-700 transition-colors border border-white/5 disabled:opacity-50"
                    >
                      <XCircle className="h-4 w-4" /> Reject
                    </button>
                    <button
                      disabled={statusLoading}
-                     onClick={() => handleStatusUpdate(ApplicationStatus.INTERVIEW)}
+                     onClick={handleAdvanceClick} // Updated onClick to use the new handler
                      className="flex items-center justify-center gap-2 py-2 rounded-lg bg-orange-600 text-white text-sm font-medium hover:bg-orange-500 transition-colors shadow-lg shadow-orange-900/20 disabled:opacity-50"
                    >
                      <CheckCircle className="h-4 w-4" /> Advance
@@ -640,6 +1222,118 @@ export default function AdminApplicationsPage() {
                </div>
 
                <div className="h-px bg-white/5" />
+
+               {/* Interview Offers & Preferred Systems */}
+                <div>
+                  <h3 className="font-bold text-white mb-4">System Status</h3>
+                  
+                  {/* Preferred Systems */}
+                  <div className="mb-4">
+                    <p className="text-xs text-neutral-500 uppercase tracking-wider mb-2">Applicant Interests</p>
+                    <div className="flex flex-wrap gap-2">
+                      {(selectedApp.preferredSystems || []).length > 0 ? (
+                        (selectedApp.preferredSystems || []).map(sys => (
+                          <span 
+                            key={sys} 
+                            className="px-2 py-1 text-xs bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-full"
+                          >
+                            {sys}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-neutral-500 text-sm italic">None specified</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Interview Offers */}
+                  <div>
+                    <p className="text-xs text-neutral-500 uppercase tracking-wider mb-2">Interview Offers</p>
+                    {selectedApp.interviewOffers && selectedApp.interviewOffers.length > 0 ? (
+                      <div className="space-y-2">
+                        {selectedApp.interviewOffers.map((offer, idx) => (
+                          <div 
+                            key={idx} 
+                            onClick={() => handleInterviewOfferClick(offer)}
+                            className="flex items-center justify-between p-2 bg-neutral-800/50 rounded-lg border border-white/5 cursor-pointer hover:bg-neutral-700/50 hover:border-white/10 transition-colors"
+                          >
+                            <span className="text-sm text-white font-medium">{offer.system}</span>
+                            <span className={clsx(
+                              "px-2 py-0.5 text-xs rounded-full",
+                              offer.status === "pending" && "bg-yellow-500/10 text-yellow-400 border border-yellow-500/20",
+                              offer.status === "scheduled" && "bg-green-500/10 text-green-400 border border-green-500/20",
+                              offer.status === "completed" && "bg-blue-500/10 text-blue-400 border border-blue-500/20",
+                              offer.status === "cancelled" && "bg-red-500/10 text-red-400 border border-red-500/20",
+                              offer.status === "no_show" && "bg-red-500/10 text-red-400 border border-red-500/20"
+                            )}>
+                              {offer.status.replace("_", " ")}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-neutral-500 text-sm italic">No interview offers yet</p>
+                    )}
+                  </div>
+
+                  {/* Trial Offers */}
+                  <div className="mt-4">
+                    <p className="text-xs text-neutral-500 uppercase tracking-wider mb-2">Trial Workday Offers</p>
+                    {selectedApp.trialOffers && selectedApp.trialOffers.length > 0 ? (
+                      <div className="space-y-2">
+                        {selectedApp.trialOffers.map((offer, idx) => {
+                          // Determine display status based on accepted field
+                          const getStatusDisplay = () => {
+                            if (offer.accepted === true) return { label: "Accepted", style: "bg-green-500/10 text-green-400 border border-green-500/20" };
+                            if (offer.accepted === false) return { label: "Declined", style: "bg-red-500/10 text-red-400 border border-red-500/20" };
+                            return { label: "Pending", style: "bg-yellow-500/10 text-yellow-400 border border-yellow-500/20" };
+                          };
+                          const statusDisplay = getStatusDisplay();
+                          
+                          return (
+                            <div 
+                              key={idx} 
+                              className="p-2 bg-neutral-800/50 rounded-lg border border-white/5"
+                            >
+                              <div className="flex items-center justify-between">
+                                <span className="text-sm text-white font-medium">{offer.system}</span>
+                                <span className={clsx("px-2 py-0.5 text-xs rounded-full", statusDisplay.style)}>
+                                  {statusDisplay.label}
+                                </span>
+                              </div>
+                              {offer.accepted === false && offer.rejectionReason && (
+                                <p className="text-xs text-neutral-400 mt-1">
+                                  Reason: {offer.rejectionReason}
+                                </p>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-neutral-500 text-sm italic">No trial offers yet</p>
+                    )}
+                  </div>
+
+                  {/* Rejected By Systems */}
+                  {selectedApp.rejectedBySystems && selectedApp.rejectedBySystems.length > 0 && (
+                    <div className="mt-4">
+                      <p className="text-xs text-neutral-500 uppercase tracking-wider mb-2">Rejected By</p>
+                      <div className="flex flex-wrap gap-2">
+                        {selectedApp.rejectedBySystems.map(sys => (
+                          <span 
+                            key={sys} 
+                            className="px-2 py-1 text-xs bg-red-500/10 text-red-400 border border-red-500/20 rounded-full"
+                          >
+                            {sys}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="h-px bg-white/5" />
 
                {/* Team Notes */}
                <div>
@@ -763,6 +1457,497 @@ export default function AdminApplicationsPage() {
           </div>
         )}
       </main>
+
+      {/* Interview Systems Selection Modal */}
+      {showInterviewModal && selectedApp && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-neutral-900 border border-white/10 rounded-2xl p-6 max-w-md w-full mx-4 shadow-2xl">
+            <h3 className="text-xl font-bold text-white mb-2">Extend Interview Offers</h3>
+            <p className="text-neutral-400 text-sm mb-6">
+              Select which systems to extend interview offers for. The applicant expressed interest in the highlighted systems.
+            </p>
+            
+            <div className="space-y-2 mb-6">
+              {getTeamSystemOptions().map((sys) => {
+                const appSystems = selectedApp.preferredSystems || [];
+                const isPreferred = appSystems.includes(sys.value as any);
+                const isChecked = selectedInterviewSystems.includes(sys.value);
+                
+                return (
+                  <label
+                    key={sys.value}
+                    className={clsx(
+                      "flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all",
+                      isChecked
+                        ? "bg-orange-500/10 border-orange-500/50"
+                        : "bg-neutral-800 border-white/10 hover:border-white/20"
+                    )}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      onChange={(e) => {
+                        setSelectedInterviewSystems(prev =>
+                          e.target.checked
+                            ? [...prev, sys.value]
+                            : prev.filter(s => s !== sys.value)
+                        );
+                      }}
+                      className="w-4 h-4 rounded border-neutral-600 bg-neutral-800 text-orange-600 focus:ring-orange-600 focus:ring-offset-neutral-900"
+                    />
+                    <span className="text-white font-medium">{sys.label}</span>
+                    {isPreferred && (
+                      <span className="ml-auto text-xs bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded-full">
+                        Applicant Interest
+                      </span>
+                    )}
+                  </label>
+                );
+              })}
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowInterviewModal(false)}
+                className="flex-1 py-2 rounded-lg bg-neutral-800 text-white font-medium hover:bg-neutral-700 transition-colors border border-white/10"
+              >
+                Cancel
+              </button>
+              <button
+                disabled={selectedInterviewSystems.length === 0 || statusLoading}
+                onClick={() => handleStatusUpdate(ApplicationStatus.INTERVIEW, selectedInterviewSystems)}
+                className="flex-1 py-2 rounded-lg bg-orange-600 text-white font-medium hover:bg-orange-500 transition-colors disabled:opacity-50"
+              >
+                {statusLoading ? "Extending..." : `Extend Offers (${selectedInterviewSystems.length})`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Trial Systems Selection Modal */}
+      {showTrialModal && selectedApp && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+        <div className="bg-neutral-900 border border-white/10 rounded-2xl p-6 max-w-md w-full mx-4 shadow-2xl">
+            <h3 className="text-xl font-bold text-white mb-2">Extend Trial Workday Invite</h3>
+            <p className="text-neutral-400 text-sm mb-6">
+              Select ONE system to extend a trial workday invite for. Systems with completed interviews are highlighted.
+            </p>
+            
+            <div className="space-y-2 mb-6">
+              {getTeamSystemOptions().map((sys) => {
+                const hasCompletedInterview = selectedApp.interviewOffers?.some(
+                  o => o.system === sys.value && o.status === 'completed'
+                );
+                const isSelected = selectedTrialSystems[0] === sys.value;
+                
+                return (
+                  <label
+                    key={sys.value}
+                    className={clsx(
+                      "flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all",
+                      isSelected
+                        ? "bg-purple-500/10 border-purple-500/50"
+                        : "bg-neutral-800 border-white/10 hover:border-white/20"
+                    )}
+                  >
+                    <input
+                      type="radio"
+                      name="trialSystem"
+                      checked={isSelected}
+                      onChange={() => setSelectedTrialSystems([sys.value])}
+                      className="w-4 h-4 border-neutral-600 bg-neutral-800 text-purple-600 focus:ring-purple-600 focus:ring-offset-neutral-900"
+                    />
+                    <span className="text-white font-medium">{sys.label}</span>
+                    {hasCompletedInterview && (
+                      <span className="ml-auto text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full">
+                        Interviewed
+                      </span>
+                    )}
+                  </label>
+                );
+              })}
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowTrialModal(false)}
+                className="flex-1 py-2 rounded-lg bg-neutral-800 text-white font-medium hover:bg-neutral-700 transition-colors border border-white/10"
+              >
+                Cancel
+              </button>
+              <button
+                disabled={selectedTrialSystems.length === 0 || statusLoading}
+                onClick={() => handleStatusUpdate(ApplicationStatus.TRIAL, selectedTrialSystems)}
+                className="flex-1 py-2 rounded-lg bg-purple-600 text-white font-medium hover:bg-purple-500 transition-colors disabled:opacity-50"
+              >
+                {statusLoading ? "Extending..." : "Extend Invite"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Interview Detail Modal */}
+      {showInterviewDetailModal && selectedInterviewOffer && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-neutral-900 border border-white/10 rounded-2xl p-6 max-w-md w-full mx-4 shadow-2xl">
+            <h3 className="text-xl font-bold text-white mb-2">Interview Details</h3>
+            <p className="text-neutral-400 text-sm mb-6">
+              {selectedInterviewOffer.system} System Interview
+            </p>
+            
+            {/* Interview Details */}
+            <div className="space-y-3 mb-6 p-4 bg-neutral-800/50 rounded-lg border border-white/5">
+              <div className="flex justify-between">
+                <span className="text-neutral-400 text-sm">Status</span>
+                <span className={clsx(
+                  "px-2 py-0.5 text-xs rounded-full",
+                  selectedInterviewOffer.status === "pending" && "bg-yellow-500/10 text-yellow-400 border border-yellow-500/20",
+                  selectedInterviewOffer.status === "scheduling" && "bg-orange-500/10 text-orange-400 border border-orange-500/20",
+                  selectedInterviewOffer.status === "scheduled" && "bg-green-500/10 text-green-400 border border-green-500/20",
+                  selectedInterviewOffer.status === "completed" && "bg-blue-500/10 text-blue-400 border border-blue-500/20",
+                  selectedInterviewOffer.status === "cancelled" && "bg-red-500/10 text-red-400 border border-red-500/20",
+                  selectedInterviewOffer.status === "no_show" && "bg-red-500/10 text-red-400 border border-red-500/20"
+                )}>
+                  {selectedInterviewOffer.status.replace("_", " ")}
+                </span>
+              </div>
+              
+              {selectedInterviewOffer.scheduledAt && (
+                <div className="flex justify-between">
+                  <span className="text-neutral-400 text-sm">Scheduled</span>
+                  <span className="text-white text-sm">
+                    {format(new Date(selectedInterviewOffer.scheduledAt), "MMM d, yyyy h:mm a")}
+                  </span>
+                </div>
+              )}
+              
+              {selectedInterviewOffer.scheduledEndAt && (
+                <div className="flex justify-between">
+                  <span className="text-neutral-400 text-sm">Duration</span>
+                  <span className="text-white text-sm">
+                    {Math.round((new Date(selectedInterviewOffer.scheduledEndAt).getTime() - new Date(selectedInterviewOffer.scheduledAt!).getTime()) / 60000)} min
+                  </span>
+                </div>
+              )}
+              
+              {selectedInterviewOffer.createdAt && (
+                <div className="flex justify-between">
+                  <span className="text-neutral-400 text-sm">Created</span>
+                  <span className="text-white text-sm">
+                    {format(new Date(selectedInterviewOffer.createdAt), "MMM d, yyyy")}
+                  </span>
+                </div>
+              )}
+              
+              {selectedInterviewOffer.cancelReason && (
+                <div className="mt-2 pt-2 border-t border-white/5">
+                  <span className="text-neutral-400 text-sm">Cancel Reason</span>
+                  <p className="text-white text-sm mt-1">{selectedInterviewOffer.cancelReason}</p>
+                </div>
+              )}
+            </div>
+
+            {/* Actions - only show for actionable statuses */}
+            {(selectedInterviewOffer.status === "scheduled" || selectedInterviewOffer.status === "pending") && (
+              <div className="space-y-2 mb-4">
+                <p className="text-xs text-neutral-500 uppercase tracking-wider">Actions</p>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    disabled={interviewStatusUpdating}
+                    onClick={() => handleUpdateInterviewStatus('completed')}
+                    className="py-2 px-3 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-500 transition-colors disabled:opacity-50"
+                  >
+                    Complete
+                  </button>
+                  <button
+                    disabled={interviewStatusUpdating}
+                    onClick={() => handleUpdateInterviewStatus('no_show')}
+                    className="py-2 px-3 rounded-lg bg-orange-600 text-white text-sm font-medium hover:bg-orange-500 transition-colors disabled:opacity-50"
+                  >
+                    No Show
+                  </button>
+                  <button
+                    disabled={interviewStatusUpdating}
+                    onClick={() => handleUpdateInterviewStatus('cancelled')}
+                    className="py-2 px-3 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-500 transition-colors disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <button
+              onClick={() => {
+                setShowInterviewDetailModal(false);
+                setSelectedInterviewOffer(null);
+              }}
+              className="w-full py-2 rounded-lg bg-neutral-800 text-white font-medium hover:bg-neutral-700 transition-colors border border-white/10"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Rejection Modal */}
+      {showRejectModal && selectedApp && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-neutral-900 border border-white/10 rounded-2xl p-6 max-w-md w-full mx-4 shadow-2xl">
+            <h3 className="text-xl font-bold text-white mb-2">Reject from Systems</h3>
+            <p className="text-neutral-400 text-sm mb-6">
+              Select which systems to reject the applicant from. The application will only be marked as "Rejected" if no interview offers remain.
+            </p>
+            
+            <div className="space-y-2 mb-6">
+              {getTeamSystemOptions().map((sys) => {
+                const hasOffer = selectedApp.interviewOffers?.some(o => o.system === sys.value);
+                const isAlreadyRejected = selectedApp.rejectedBySystems?.includes(sys.value);
+                const isPreferred = (selectedApp.preferredSystems || []).includes(sys.value as any);
+                const isChecked = selectedRejectSystems.includes(sys.value);
+                
+                // Role-based restriction: non-admin/non-captain can only reject from their own system
+                const isHigherAuthority = currentUser?.role === UserRole.ADMIN || 
+                                          currentUser?.role === UserRole.TEAM_CAPTAIN_OB;
+                const isOwnSystem = currentUser?.memberProfile?.system === sys.value;
+                const canRejectFromSystem = isHigherAuthority || isOwnSystem;
+                // Can reject from any preferred system (not just those with offers), but must have permission
+                const isDisabled = !canRejectFromSystem || isAlreadyRejected;
+                
+                return (
+                  <label
+                    key={sys.value}
+                    className={clsx(
+                      "flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all",
+                      isChecked
+                        ? "bg-red-500/10 border-red-500/50"
+                        : "bg-neutral-800 border-white/10 hover:border-white/20",
+                      isDisabled && "opacity-50 cursor-not-allowed"
+                    )}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      disabled={isDisabled}
+                      onChange={(e) => {
+                        if (isDisabled) return;
+                        setSelectedRejectSystems(prev =>
+                          e.target.checked
+                            ? [...prev, sys.value]
+                            : prev.filter(s => s !== sys.value)
+                        );
+                      }}
+                      className="w-4 h-4 rounded border-neutral-600 bg-neutral-800 text-red-600 focus:ring-red-600 focus:ring-offset-neutral-900"
+                    />
+                    <span className="text-white font-medium">{sys.label}</span>
+                    {hasOffer && (
+                      <span className="ml-auto text-xs bg-cyan-500/20 text-cyan-400 px-2 py-0.5 rounded-full">
+                        Has Offer
+                      </span>
+                    )}
+                    {isAlreadyRejected && (
+                      <span className="ml-auto text-xs bg-red-500/20 text-red-400 px-2 py-0.5 rounded-full">
+                        Already Rejected
+                      </span>
+                    )}
+                    {!isHigherAuthority && !isOwnSystem && !isAlreadyRejected && (
+                      <span className="ml-auto text-xs bg-neutral-700 text-neutral-400 px-2 py-0.5 rounded-full">
+                        Not your system
+                      </span>
+                    )}
+                  </label>
+                );
+              })}
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowRejectModal(false)}
+                className="flex-1 py-2 rounded-lg bg-neutral-800 text-white font-medium hover:bg-neutral-700 transition-colors border border-white/10"
+              >
+                Cancel
+              </button>
+              <button
+                disabled={selectedRejectSystems.length === 0 || statusLoading}
+                onClick={handleRejectSubmit}
+                className="flex-1 py-2 rounded-lg bg-red-600 text-white font-medium hover:bg-red-500 transition-colors disabled:opacity-50"
+              >
+                {statusLoading ? "Rejecting..." : `Reject (${selectedRejectSystems.length})`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Accept Application Modal */}
+      {showAcceptModal && selectedApp && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-neutral-900 border border-white/10 rounded-2xl p-6 max-w-md w-full mx-4 shadow-2xl">
+            <h3 className="text-xl font-bold text-white mb-6">Accept Application</h3>
+            
+            <div className="space-y-4 mb-6">
+              {/* System */}
+              <div>
+                <label className="block text-sm font-medium text-neutral-400 mb-2">System</label>
+                <select
+                  value={acceptFormData.system}
+                  onChange={(e) => setAcceptFormData({ ...acceptFormData, system: e.target.value })}
+                  className="w-full bg-neutral-800 border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-green-500"
+                >
+                  <option value="" disabled>Select a system</option>
+                  {getTeamSystemOptions().map(sys => (
+                    <option key={sys.value} value={sys.value}>{sys.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Role */}
+              <div>
+                <label className="block text-sm font-medium text-neutral-400 mb-2">Role</label>
+                <select
+                  value={acceptFormData.role}
+                  onChange={(e) => setAcceptFormData({ ...acceptFormData, role: e.target.value })}
+                  className="w-full bg-neutral-800 border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-green-500"
+                >
+                  <option value="Member">Member</option>
+                  <option value="Lead">Lead</option>
+                  <option value="Co-Lead">Co-Lead</option>
+                </select>
+              </div>
+              
+              {/* Details / Notes */}
+              <div>
+                <label className="block text-sm font-medium text-neutral-400 mb-2">Additional Offer Details (Optional)</label>
+                <textarea
+                  value={acceptFormData.details}
+                  onChange={(e) => setAcceptFormData({ ...acceptFormData, details: e.target.value })}
+                  placeholder="e.g., Specific responsibilities, project assignment..."
+                  className="w-full bg-neutral-800 border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-green-500 min-h-[100px]"
+                />
+              </div>
+            </div>
+            
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowAcceptModal(false)}
+                className="flex-1 py-2 rounded-lg bg-neutral-800 text-white font-medium hover:bg-neutral-700 transition-colors border border-white/10"
+              >
+                Cancel
+              </button>
+              <button
+                disabled={!acceptFormData.system || statusLoading}
+                onClick={handleAcceptSubmit}
+                className="flex-1 py-2 rounded-lg bg-green-600 text-white font-medium hover:bg-green-500 transition-colors disabled:opacity-50"
+              >
+                {statusLoading ? "Accepting..." : "Accept Applicant"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Application Modal */}
+      {showEditModal && selectedApp && editFormData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-neutral-900 border border-white/10 rounded-2xl p-6 max-w-md w-full mx-4 shadow-2xl">
+            <h3 className="text-xl font-bold text-white mb-6">Edit Application</h3>
+            
+            <div className="space-y-4 mb-6">
+              {/* Team */}
+              <div>
+                <label className="block text-sm font-medium text-neutral-400 mb-2">Team</label>
+                <select
+                  value={editFormData.team}
+                  onChange={(e) => setEditFormData({ ...editFormData, team: e.target.value as Team })}
+                  className="w-full bg-neutral-800 border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-orange-500"
+                >
+                  {Object.values(Team).map(team => (
+                    <option key={team} value={team}>{team}</option>
+                  ))}
+                </select>
+              </div>
+              
+              {/* Preferred Systems */}
+              <div>
+                <label className="block text-sm font-medium text-neutral-400 mb-2">Preferred Systems</label>
+                <div className="space-y-2">
+                  {getTeamSystemOptions().map((sys) => {
+                    const isChecked = editFormData.preferredSystems.includes(sys.value);
+                    return (
+                      <label
+                        key={sys.value}
+                        className={clsx(
+                          "flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all",
+                          isChecked
+                            ? "bg-orange-500/10 border-orange-500/50"
+                            : "bg-neutral-800 border-white/10 hover:border-white/20"
+                        )}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={(e) => {
+                            setEditFormData({
+                              ...editFormData,
+                              preferredSystems: e.target.checked
+                                ? [...editFormData.preferredSystems, sys.value]
+                                : editFormData.preferredSystems.filter(s => s !== sys.value)
+                            });
+                          }}
+                          className="w-4 h-4 rounded border-neutral-600 bg-neutral-800 text-orange-600 focus:ring-orange-600 focus:ring-offset-neutral-900"
+                        />
+                        <span className="text-white font-medium">{sys.label}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+              
+              {/* Graduation Year */}
+              <div>
+                <label className="block text-sm font-medium text-neutral-400 mb-2">Graduation Year</label>
+                <input
+                  type="text"
+                  value={editFormData.graduationYear}
+                  onChange={(e) => setEditFormData({ ...editFormData, graduationYear: e.target.value })}
+                  placeholder="e.g., 2026"
+                  className="w-full bg-neutral-800 border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-orange-500"
+                />
+              </div>
+              
+              {/* Major */}
+              <div>
+                <label className="block text-sm font-medium text-neutral-400 mb-2">Major</label>
+                <input
+                  type="text"
+                  value={editFormData.major}
+                  onChange={(e) => setEditFormData({ ...editFormData, major: e.target.value })}
+                  placeholder="e.g., Electrical Engineering"
+                  className="w-full bg-neutral-800 border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-orange-500"
+                />
+              </div>
+            </div>
+            
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowEditModal(false)}
+                className="flex-1 py-2 rounded-lg bg-neutral-800 text-white font-medium hover:bg-neutral-700 transition-colors border border-white/10"
+              >
+                Cancel
+              </button>
+              <button
+                disabled={editSaving}
+                onClick={handleSaveEdit}
+                className="flex-1 py-2 rounded-lg bg-orange-600 text-white font-medium hover:bg-orange-500 transition-colors disabled:opacity-50"
+              >
+                {editSaving ? "Saving..." : "Save Changes"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -128,6 +128,7 @@ export async function getCalendarClient(): Promise<calendar_v3.Calendar> {
 
 /**
  * Query the FreeBusy API to get available time slots for scheduling.
+ * Also filters out slots that are currently locked by other applicants.
  *
  * @param config - Interview slot configuration with calendar and time constraints
  * @param startDate - Start of the date range to check
@@ -157,8 +158,32 @@ export async function getAvailableSlots(
   // Generate all possible slots within the date range
   const allSlots = generatePossibleSlots(config, startDate, endDate);
 
-  // Filter out busy slots
+  // Query Firestore for locked slots on this calendar within the date range
+  const lockedSlotsSnapshot = await adminDb
+    .collection("calendarSlotLocks")
+    .where("calendarId", "==", config.calendarId)
+    .where("slotStart", ">=", startDate)
+    .where("slotStart", "<=", endDate)
+    .get();
+
+  const lockedSlotTimes = new Set(
+    lockedSlotsSnapshot.docs.map((doc) => {
+      const data = doc.data();
+      const slotStart = data.slotStart instanceof Date 
+        ? data.slotStart 
+        : data.slotStart?.toDate?.() || new Date(data.slotStart);
+      return slotStart.getTime();
+    })
+  );
+
+  // Filter out busy slots AND locked slots
   const availableSlots = allSlots.filter((slot) => {
+    // Check if slot is locked in Firestore
+    if (lockedSlotTimes.has(slot.start.getTime())) {
+      return false;
+    }
+
+    // Check if slot overlaps with Google Calendar busy times
     return !busySlots.some((busy) => {
       const busyStart = new Date(busy.start!);
       const busyEnd = new Date(busy.end!);
@@ -363,4 +388,23 @@ export async function updateInterviewEvent(
   });
 
   return response.data;
+}
+
+/**
+ * List all calendars accessible to the service account.
+ * Used for populating the calendar selection dropdown.
+ */
+export async function listAccessibleCalendars(): Promise<{ id: string; summary: string }[]> {
+  const calendar = await getCalendarClient();
+
+  const response = await calendar.calendarList.list({
+    minAccessRole: "writer", // Ensure we can write to the calendar
+  });
+
+  return (
+    response.data.items?.map((item) => ({
+      id: item.id || "",
+      summary: item.summary || "Untitled Calendar",
+    })) || []
+  );
 }

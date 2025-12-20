@@ -32,7 +32,7 @@ interface FormData {
   relevantExperience: string;
   availability: string;
   resumeUrl: string;
-  preferredSystem: string;
+  preferredSystems: string[];
   graduationYear: string;
   major: string;
   teamQuestions: Record<string, string>;
@@ -72,7 +72,7 @@ export default function TeamApplicationPage() {
     relevantExperience: "",
     availability: "",
     resumeUrl: "",
-    preferredSystem: "",
+    preferredSystems: [],
     graduationYear: "",
     major: "",
     teamQuestions: {},
@@ -105,7 +105,7 @@ export default function TeamApplicationPage() {
             relevantExperience: app.formData.relevantExperience || "",
             availability: app.formData.availability || "",
             resumeUrl: app.formData.resumeUrl || "",
-            preferredSystem: app.preferredSystem || "",
+            preferredSystems: app.preferredSystems || [],
             graduationYear: app.formData.graduationYear || "",
             major: app.formData.major || "",
             teamQuestions: app.formData.teamQuestions || {},
@@ -142,7 +142,7 @@ export default function TeamApplicationPage() {
               major: data.major,
               teamQuestions: data.teamQuestions,
             },
-            preferredSystem: data.preferredSystem || undefined,
+            preferredSystems: data.preferredSystems.length > 0 ? data.preferredSystems : undefined,
           }),
         });
 
@@ -274,8 +274,8 @@ export default function TeamApplicationPage() {
       }
     });
 
-    if (!formData.preferredSystem) {
-      missingFields.push("Preferred System");
+    if (formData.preferredSystems.length === 0) {
+      missingFields.push("Preferred Systems (at least one)");
     }
 
     if (missingFields.length > 0) {
@@ -459,24 +459,46 @@ export default function TeamApplicationPage() {
 
         {/* Application Form */}
         <form onSubmit={handleSubmit} className="space-y-8">
-          {/* Preferred System */}
+          {/* Preferred Systems (Multi-select) */}
           <div className="p-6 rounded-2xl bg-neutral-900 border border-white/5">
-            <h2 className="text-xl font-bold text-white mb-4">
-              Preferred System
+            <h2 className="text-xl font-bold text-white mb-2">
+              Preferred Systems
             </h2>
-            <select
-              name="preferredSystem"
-              value={formData.preferredSystem}
-              onChange={handleChange}
-              className="w-full px-4 py-3 rounded-lg bg-black border border-white/10 text-white focus:border-red-500 focus:outline-none transition-colors"
-            >
-              <option value="">Select a system...</option>
-              {systemOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+            <p className="text-neutral-400 text-sm mb-4">
+              Select all systems you are interested in. You may receive interview offers for any of these.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {systemOptions.map((option) => {
+                const isSelected = formData.preferredSystems.includes(option.value);
+                return (
+                  <label
+                    key={option.value}
+                    className={`flex items-center gap-3 p-4 rounded-lg border cursor-pointer transition-all ${
+                      isSelected
+                        ? "bg-red-500/10 border-red-500/50 text-white"
+                        : "bg-black border-white/10 text-neutral-300 hover:border-white/30"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={(e) => {
+                        setFormData((prev) => {
+                          const newSystems = e.target.checked
+                            ? [...prev.preferredSystems, option.value]
+                            : prev.preferredSystems.filter((s) => s !== option.value);
+                          const newData = { ...prev, preferredSystems: newSystems };
+                          debouncedSave(newData);
+                          return newData;
+                        });
+                      }}
+                      className="w-5 h-5 rounded border-neutral-600 bg-neutral-800 text-red-600 focus:ring-red-600 focus:ring-offset-neutral-900"
+                    />
+                    <span className="font-medium">{option.label}</span>
+                  </label>
+                );
+              })}
+            </div>
           </div>
 
           {/* Common Questions */}
