@@ -6,6 +6,9 @@ import {
   reserveInterviewSlot,
   confirmInterviewReservation,
   rollbackInterviewReservation,
+  acquireCalendarSlotLock,
+  confirmCalendarSlotLock,
+  releaseCalendarSlotLock,
 } from "@/lib/firebase/applications";
 import {
   ApplicationStatus,
@@ -204,18 +207,36 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }
     }
 
-    // STEP 1: Atomically reserve the slot (acquire lock)
-    // This prevents concurrent requests from double-booking
+    // STEP 1: Acquire calendar slot lock (prevents double-booking across shared calendars)
+    // This must happen FIRST, before the application-level lock
+    try {
+      await acquireCalendarSlotLock(
+        config.calendarId,
+        startDate,
+        endDate,
+        id,
+        system
+      );
+      logger.info({ applicationId: id, calendarId: config.calendarId, slot: startDate.toISOString() }, "Acquired calendar slot lock");
+    } catch (slotLockError) {
+      const message = slotLockError instanceof Error ? slotLockError.message : "Failed to reserve slot";
+      return NextResponse.json({ error: message }, { status: 409 });
+    }
+
+    // STEP 2: Atomically reserve the application's interview offer (acquire offer lock)
+    // This prevents the same applicant from double-booking the same offer
     let reservedApplication: Awaited<ReturnType<typeof reserveInterviewSlot>>;
     try {
       reservedApplication = await reserveInterviewSlot(id, system, startDate, endDate);
     } catch (reserveError) {
-      // If reservation fails (already scheduled or in progress), return error
+      // Application reservation failed - release the calendar slot lock
+      logger.error({ err: reserveError }, "Application reservation failed, releasing calendar slot lock");
+      await releaseCalendarSlotLock(config.calendarId, startDate, id);
       const message = reserveError instanceof Error ? reserveError.message : "Failed to reserve slot";
       return NextResponse.json({ error: message }, { status: 409 });
     }
 
-    // STEP 2: Create calendar event (external API call)
+    // STEP 3: Create calendar event (external API call)
     let eventId: string;
     try {
       eventId = await createInterviewEvent(
@@ -227,15 +248,17 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         endDate
       );
     } catch (calendarError) {
-      // Calendar creation failed - rollback the reservation
-      logger.error({ err: calendarError }, "Calendar event creation failed, rolling back reservation");
+      // Calendar creation failed - rollback both locks
+      logger.error({ err: calendarError }, "Calendar event creation failed, rolling back reservations");
       await rollbackInterviewReservation(id, system);
+      await releaseCalendarSlotLock(config.calendarId, startDate, id);
       const message = calendarError instanceof Error ? calendarError.message : "Failed to create calendar event";
       return NextResponse.json({ error: message }, { status: 500 });
     }
 
-    // STEP 3: Confirm the reservation with the event ID
+    // STEP 4: Confirm both locks with the event ID
     const updatedApplication = await confirmInterviewReservation(id, system, eventId);
+    await confirmCalendarSlotLock(config.calendarId, startDate, eventId);
 
     // Auto-decline other pending interview offers (NOT for Solar - they can interview with multiple systems)
     // When an applicant schedules with one system (Electric/Combustion), cancel offers from other systems
@@ -358,6 +381,17 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     } catch (calendarError) {
       logger.error({ err: calendarError }, "Failed to cancel calendar event");
       // Continue anyway - the event might have been manually deleted
+    }
+
+    // Release the calendar slot lock so others can book this time
+    if (offer.scheduledAt) {
+      try {
+        await releaseCalendarSlotLock(config.calendarId, offer.scheduledAt, id);
+        logger.info({ applicationId: id, calendarId: config.calendarId }, "Released calendar slot lock");
+      } catch (lockError) {
+        logger.error({ err: lockError }, "Failed to release calendar slot lock");
+        // Continue anyway - the slot will be marked as cancelled in the offer
+      }
     }
 
     // Update the interview offer status
