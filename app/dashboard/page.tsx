@@ -381,11 +381,11 @@ function DashboardContent() {
                               <h3 className="font-medium text-white">
                                 {teamInfo?.name} Application
                               </h3>
-                              {(app.preferredSystems?.length || app.preferredSystem) && (
+                              {app.preferredSystems?.length ? (
                                 <p className="text-xs text-neutral-500">
-                                  Preferred: {(app.preferredSystems || (app.preferredSystem ? [app.preferredSystem] : [])).join(", ")}
+                                  Preferred: {app.preferredSystems.join(", ")}
                                 </p>
-                              )}
+                              ) : null}
                             </div>
                           </div>
                           <div className="flex items-center gap-3">

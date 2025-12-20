@@ -29,7 +29,7 @@ interface EditingField extends ScorecardFieldConfig {
   isNew?: boolean;
 }
 
-export default function AdminScorecardsPage() {
+export function ScorecardsTab() {
   const [configs, setConfigs] = useState<ScorecardConfig[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedConfig, setExpandedConfig] = useState<string | null>(null);
@@ -239,10 +239,10 @@ export default function AdminScorecardsPage() {
   }
 
   return (
-    <div className="p-8 max-w-6xl mx-auto">
+    <div>
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-3xl font-bold text-white mb-2">Scorecard Configurations</h1>
+          <h2 className="text-2xl font-bold text-white mb-2">Scorecard Configurations</h2>
           <p className="text-neutral-400">Define evaluation criteria for each team and system.</p>
         </div>
         <button
@@ -260,7 +260,7 @@ export default function AdminScorecardsPage() {
         
         return (
           <div key={team} className="mb-8">
-            <h2 className={clsx(
+            <h3 className={clsx(
               "text-xl font-bold mb-4 flex items-center gap-2",
               team === Team.ELECTRIC && "text-yellow-400",
               team === Team.SOLAR && "text-blue-400",
@@ -275,7 +275,7 @@ export default function AdminScorecardsPage() {
               <span className="text-sm font-normal text-neutral-500 ml-2">
                 ({teamConfigs.length} configuration{teamConfigs.length !== 1 ? 's' : ''})
               </span>
-            </h2>
+            </h3>
             
             {teamConfigs.length === 0 ? (
               <div className="bg-neutral-900 border border-white/5 rounded-xl p-6 text-center text-neutral-500">

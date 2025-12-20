@@ -148,8 +148,7 @@ export async function GET(
         targetSystem = user.memberProfile.system;
       } else {
         // For admins/team captains, default to first preferred system of applicant
-        const preferredSystems = application.preferredSystems || 
-          (application.preferredSystem ? [application.preferredSystem] : []);
+        const preferredSystems = application.preferredSystems || [];
         targetSystem = preferredSystems[0];
       }
     }

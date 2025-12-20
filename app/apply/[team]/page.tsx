@@ -105,7 +105,7 @@ export default function TeamApplicationPage() {
             relevantExperience: app.formData.relevantExperience || "",
             availability: app.formData.availability || "",
             resumeUrl: app.formData.resumeUrl || "",
-            preferredSystems: app.preferredSystems || (app.preferredSystem ? [app.preferredSystem] : []),
+            preferredSystems: app.preferredSystems || [],
             graduationYear: app.formData.graduationYear || "",
             major: app.formData.major || "",
             teamQuestions: app.formData.teamQuestions || {},

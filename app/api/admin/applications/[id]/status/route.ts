@@ -60,9 +60,8 @@ export async function POST(
         }
         systemsToOffer = [currentUser.memberProfile.system];
       } else {
-        // For other roles without explicit systems, try preferredSystems or preferredSystem
-        const preferred = application.preferredSystems || 
-          (application.preferredSystem ? [application.preferredSystem] : []);
+        // For other roles without explicit systems, try preferredSystems
+        const preferred = application.preferredSystems || [];
         
         if (preferred.length === 0) {
           return NextResponse.json({ 

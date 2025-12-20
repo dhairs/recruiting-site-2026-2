@@ -43,8 +43,6 @@ export async function PATCH(
     // Update preferred systems if provided
     if (preferredSystems) {
       updates.preferredSystems = preferredSystems;
-      // Also update deprecated field for compatibility
-      updates.preferredSystem = preferredSystems[0] || null;
     }
 
     // Update form data fields if provided

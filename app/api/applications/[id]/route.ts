@@ -78,7 +78,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 /**
  * PATCH /api/applications/[id]
  * Update an application (save progress or submit)
- * Body: { formData?: Partial<ApplicationFormData>, preferredSystem?: string, status?: ApplicationStatus }
+ * Body: { formData?: Partial<ApplicationFormData>, preferredSystems?: string[], status?: ApplicationStatus }
  */
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   const uid = await getCurrentUserUid(request);
@@ -118,19 +118,18 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     const body = await request.json();
-    const { formData, preferredSystem, preferredSystems, status } = body;
+    const { formData, preferredSystems, status } = body;
 
     let application;
 
     // If only formData is being updated, use the merge function
-    if (formData && !preferredSystem && !preferredSystems && !status) {
+    if (formData && !preferredSystems && !status) {
       application = await updateApplicationFormData(id, formData);
     } else {
       // Update all provided fields
       const updates: Record<string, unknown> = {};
       if (formData) updates.formData = { ...existingApplication.formData, ...formData };
       if (preferredSystems) updates.preferredSystems = preferredSystems;
-      if (preferredSystem) updates.preferredSystem = preferredSystem;
       if (status) updates.status = status;
 
       application = await updateApplication(id, updates);

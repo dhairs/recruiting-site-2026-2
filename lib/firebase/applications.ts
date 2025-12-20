@@ -287,7 +287,7 @@ export async function getUserApplicationForTeam(
  */
 export async function updateApplication(
   applicationId: string,
-  updates: Partial<Pick<Application, "formData" | "preferredSystem" | "preferredSystems" | "status" | "interviewOffers" | "selectedInterviewSystem" | "rejectedBySystems">>
+  updates: Partial<Pick<Application, "formData" | "preferredSystems" | "status" | "interviewOffers" | "selectedInterviewSystem" | "rejectedBySystems">>
 ): Promise<Application | null> {
   const applicationRef = adminDb
     .collection(APPLICATIONS_COLLECTION)

@@ -247,8 +247,7 @@ export default function AdminApplicationsPage() {
     if (!selectedApp) return;
     setEditFormData({
       team: selectedApp.team,
-      preferredSystems: selectedApp.preferredSystems || 
-        (selectedApp.preferredSystem ? [selectedApp.preferredSystem] : []),
+      preferredSystems: selectedApp.preferredSystems || [],
       graduationYear: selectedApp.formData.graduationYear || "",
       major: selectedApp.formData.major || "",
     });
@@ -549,7 +548,7 @@ export default function AdminApplicationsPage() {
     const matchesName = app.user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       app.user.email.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilters.length === 0 || statusFilters.includes(app.status);
-    const appSystems = app.preferredSystems || (app.preferredSystem ? [app.preferredSystem] : []);
+    const appSystems = app.preferredSystems || [];
     const matchesSystem = systemFilters.length === 0 || appSystems.some(s => systemFilters.includes(s));
     const matchesTeam = teamFilters.length === 0 || teamFilters.includes(app.team);
     return matchesName && matchesStatus && matchesSystem && matchesTeam;
@@ -628,24 +627,44 @@ export default function AdminApplicationsPage() {
                 </button>
               ))}
             </div>
-            <div className="text-xs text-neutral-500 mb-1 mt-3">System</div>
-            <div className="flex flex-wrap gap-1">
-              {[...new Set(applications.map(a => a.preferredSystem).filter(Boolean))].map(system => (
-                <button
-                  key={system}
-                  onClick={() => setSystemFilters(prev => 
-                    prev.includes(system!) ? prev.filter(s => s !== system) : [...prev, system!]
-                  )}
-                  className={`px-2 py-1 text-xs rounded-md border transition-colors ${
-                    systemFilters.includes(system!)
-                      ? 'bg-blue-500/20 border-blue-500/50 text-blue-400'
-                      : 'bg-neutral-800 border-white/10 text-neutral-400 hover:border-white/20'
-                  }`}
-                >
-                  {system}
-                </button>
-              ))}
-            </div>
+            {/* System filter: only show if teams are selected or there's only one team */}
+            {(() => {
+              const allTeams = [...new Set(applications.map(a => a.team))];
+              const applicableTeams = teamFilters.length > 0 ? teamFilters : (allTeams.length === 1 ? allTeams : []);
+              
+              if (applicableTeams.length === 0) return null;
+              
+              // Get systems for the applicable teams
+              const applicableSystems = applicableTeams.flatMap(team => 
+                TEAM_SYSTEMS[team as Team]?.map(s => s.value) || []
+              );
+              const uniqueSystems = [...new Set(applicableSystems)];
+              
+              if (uniqueSystems.length === 0) return null;
+              
+              return (
+                <>
+                  <div className="text-xs text-neutral-500 mb-1 mt-3">System</div>
+                  <div className="flex flex-wrap gap-1">
+                    {uniqueSystems.map(system => (
+                      <button
+                        key={system}
+                        onClick={() => setSystemFilters(prev => 
+                          prev.includes(system) ? prev.filter(s => s !== system) : [...prev, system]
+                        )}
+                        className={`px-2 py-1 text-xs rounded-md border transition-colors ${
+                          systemFilters.includes(system)
+                            ? 'bg-blue-500/20 border-blue-500/50 text-blue-400'
+                            : 'bg-neutral-800 border-white/10 text-neutral-400 hover:border-white/20'
+                        }`}
+                      >
+                        {system}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              );
+            })()}
             {(statusFilters.length > 0 || systemFilters.length > 0 || teamFilters.length > 0) && (
               <button
                 onClick={() => { setStatusFilters([]); setSystemFilters([]); setTeamFilters([]); }}
@@ -678,7 +697,7 @@ export default function AdminApplicationsPage() {
                     {app.team}
                   </span>
                   <span>•</span>
-                  <span>{app.preferredSystem || "General"}</span>
+                  <span>{(app.preferredSystems?.length ? app.preferredSystems.join(", ") : "General")}</span>
                 </div>
                 <StatusBadge status={app.status} />
              </div>
@@ -714,11 +733,11 @@ export default function AdminApplicationsPage() {
                           <span className="px-2 py-1 rounded bg-orange-500/10 text-orange-400 text-xs font-medium border border-orange-500/20">
                             {selectedApp.team} Team
                           </span>
-                           {selectedApp.preferredSystem && (
-                             <span className="px-2 py-1 rounded bg-blue-500/10 text-blue-400 text-xs font-medium border border-blue-500/20">
-                               {selectedApp.preferredSystem}
+                           {(selectedApp.preferredSystems?.length ?? 0) > 0 && selectedApp.preferredSystems!.map(sys => (
+                             <span key={sys} className="px-2 py-1 rounded bg-blue-500/10 text-blue-400 text-xs font-medium border border-blue-500/20">
+                               {sys}
                              </span>
-                           )}
+                           ))}
                         </div>
                       </div>
                     </div>
@@ -1167,8 +1186,8 @@ export default function AdminApplicationsPage() {
                   <div className="mb-4">
                     <p className="text-xs text-neutral-500 uppercase tracking-wider mb-2">Applicant Interests</p>
                     <div className="flex flex-wrap gap-2">
-                      {(selectedApp.preferredSystems || (selectedApp.preferredSystem ? [selectedApp.preferredSystem] : [])).length > 0 ? (
-                        (selectedApp.preferredSystems || (selectedApp.preferredSystem ? [selectedApp.preferredSystem] : [])).map(sys => (
+                      {(selectedApp.preferredSystems || []).length > 0 ? (
+                        (selectedApp.preferredSystems || []).map(sys => (
                           <span 
                             key={sys} 
                             className="px-2 py-1 text-xs bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-full"
@@ -1405,8 +1424,7 @@ export default function AdminApplicationsPage() {
             
             <div className="space-y-2 mb-6">
               {getTeamSystemOptions().map((sys) => {
-                const appSystems = selectedApp.preferredSystems || 
-                  (selectedApp.preferredSystem ? [selectedApp.preferredSystem] : []);
+                const appSystems = selectedApp.preferredSystems || [];
                 const isPreferred = appSystems.includes(sys.value as any);
                 const isChecked = selectedInterviewSystems.includes(sys.value);
                 
@@ -1642,8 +1660,7 @@ export default function AdminApplicationsPage() {
               {getTeamSystemOptions().map((sys) => {
                 const hasOffer = selectedApp.interviewOffers?.some(o => o.system === sys.value);
                 const isAlreadyRejected = selectedApp.rejectedBySystems?.includes(sys.value);
-                const isPreferred = (selectedApp.preferredSystems || 
-                  (selectedApp.preferredSystem ? [selectedApp.preferredSystem] : [])).includes(sys.value as any);
+                const isPreferred = (selectedApp.preferredSystems || []).includes(sys.value as any);
                 const isChecked = selectedRejectSystems.includes(sys.value);
                 
                 // Role-based restriction: non-admin/non-captain can only reject from their own system
