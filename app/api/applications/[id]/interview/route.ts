@@ -133,6 +133,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             return { ...offer, availableSlots: [], configMissing: true };
           }
 
+          // Check if calendar ID is configured - if not, config is still being set up
+          if (!config.calendarId) {
+            return { ...offer, availableSlots: [], configPending: true };
+          }
+
           // Get slots for next 2 weeks
           const startDate = new Date();
           const endDate = new Date();

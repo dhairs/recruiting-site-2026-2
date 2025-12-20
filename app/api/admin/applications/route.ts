@@ -35,6 +35,8 @@ export async function GET(request: NextRequest) {
            return NextResponse.json({ error: "Team profile missing" }, { status: 403 });
         }
         applications = await getTeamApplications(user.memberProfile.team);
+        // Filter out in_progress applications - non-admins shouldn't see drafts
+        applications = applications.filter(app => app.status !== "in_progress");
         break;
 
       case UserRole.SYSTEM_LEAD:
@@ -44,6 +46,8 @@ export async function GET(request: NextRequest) {
            return NextResponse.json({ error: "System profile missing" }, { status: 403 });
         }
         applications = await getSystemApplications(user.memberProfile.team, user.memberProfile.system);
+        // Filter out in_progress applications - non-admins shouldn't see drafts
+        applications = applications.filter(app => app.status !== "in_progress");
         break;
 
 

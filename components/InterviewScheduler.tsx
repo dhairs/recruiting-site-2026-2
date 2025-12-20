@@ -431,58 +431,64 @@ export default function InterviewScheduler({
                       No available slots at this time. Please check back later.
                     </p>
                   ) : (
-                    <div className="space-y-4 max-h-80 overflow-y-auto pr-2">
-                      {Object.entries(slotsByDay).map(([day, slots]) => (
-                        <div key={day}>
-                          <h5 className="text-sm font-medium text-neutral-300 mb-2">
-                            {day}
-                          </h5>
-                          <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-                            {slots.map((slot) => {
-                              const isSelected =
-                                selectedSlot?.system === offer.system &&
-                                selectedSlot?.start === slot.start;
-                              return (
-                                <button
-                                  key={slot.start}
-                                  onClick={() =>
-                                    setSelectedSlot({
-                                      system: offer.system,
-                                      start: slot.start,
-                                      end: slot.end,
-                                    })
-                                  }
-                                  className={`px-3 py-2 text-xs rounded-lg border transition-all ${
-                                    isSelected
-                                      ? "bg-cyan-500/20 border-cyan-500 text-cyan-400"
-                                      : "bg-neutral-800 border-white/10 text-white hover:border-cyan-500/50"
-                                  }`}
-                                >
-                                  {formatTime(slot.start)}
-                                </button>
-                              );
-                            })}
+                    <div className="space-y-4">
+                      {/* Scrollable slot picker */}
+                      <div className="max-h-80 overflow-y-auto pr-2 space-y-4">
+                        {Object.entries(slotsByDay).map(([day, slots]) => (
+                          <div key={day}>
+                            <h5 className="text-sm font-medium text-neutral-300 mb-2">
+                              {day}
+                            </h5>
+                            <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                              {slots.map((slot) => {
+                                const isSelected =
+                                  selectedSlot?.system === offer.system &&
+                                  selectedSlot?.start === slot.start;
+                                return (
+                                  <button
+                                    key={slot.start}
+                                    onClick={() =>
+                                      setSelectedSlot({
+                                        system: offer.system,
+                                        start: slot.start,
+                                        end: slot.end,
+                                      })
+                                    }
+                                    className={`px-3 py-2 text-xs rounded-lg border transition-all ${
+                                      isSelected
+                                        ? "bg-cyan-500/20 border-cyan-500 text-cyan-400"
+                                        : "bg-neutral-800 border-white/10 text-white hover:border-cyan-500/50"
+                                    }`}
+                                  >
+                                    {formatTime(slot.start)}
+                                  </button>
+                                );
+                              })}
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
 
+                      {/* Sticky confirmation bar - appears outside scroll area when slot selected */}
                       {selectedSlot?.system === offer.system && (
-                        <div className="pt-4 border-t border-white/10">
-                          <p className="text-sm text-neutral-300 mb-3">
-                            Selected:{" "}
-                            <span className="text-white font-medium">
-                              {formatDateTime(selectedSlot.start)}
-                            </span>
-                          </p>
-                          <button
-                            onClick={scheduleInterview}
-                            disabled={scheduling}
-                            className="w-full h-10 rounded-lg bg-cyan-600 hover:bg-cyan-700 text-white font-medium text-sm transition-colors disabled:opacity-50"
-                          >
-                            {scheduling
-                              ? "Scheduling..."
-                              : "Confirm Interview Time"}
-                          </button>
+                        <div className="sticky bottom-0 pt-4 pb-2 bg-gradient-to-t from-black/90 via-black/80 to-transparent -mx-4 px-4 -mb-4 border-t border-white/10">
+                          <div className="flex items-center justify-between gap-4">
+                            <p className="text-sm text-neutral-300 flex-shrink-0">
+                              Selected:{" "}
+                              <span className="text-white font-medium">
+                                {formatDateTime(selectedSlot.start)}
+                              </span>
+                            </p>
+                            <button
+                              onClick={scheduleInterview}
+                              disabled={scheduling}
+                              className="flex-shrink-0 px-6 py-2.5 rounded-lg bg-cyan-600 hover:bg-cyan-700 text-white font-medium text-sm transition-colors disabled:opacity-50 shadow-lg shadow-cyan-500/20"
+                            >
+                              {scheduling
+                                ? "Scheduling..."
+                                : "Confirm Interview"}
+                            </button>
+                          </div>
                         </div>
                       )}
                     </div>

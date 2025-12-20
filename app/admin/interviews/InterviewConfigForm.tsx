@@ -177,13 +177,9 @@ export function InterviewConfigForm({ config, calendars, availableUsers }: Props
               <label className="block text-sm font-medium text-neutral-400 mb-1 flex items-center gap-2">
                  <Globe className="h-4 w-4" /> Timezone
               </label>
-              <input
-                type="text"
-                value={formData.timezone || ""}
-                onChange={(e) => handleChange("timezone", e.target.value)}
-                placeholder="e.g., America/Chicago"
-                className="w-full bg-neutral-950 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-1 focus:ring-orange-500"
-              />
+              <div className="w-full bg-neutral-950 border border-white/10 rounded-lg px-3 py-2 text-neutral-400">
+                America/Chicago (CST)
+              </div>
             </div>
           </div>
         </div>

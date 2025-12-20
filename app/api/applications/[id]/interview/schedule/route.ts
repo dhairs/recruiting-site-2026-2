@@ -227,12 +227,43 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       scheduledEndAt: endDate,
     });
 
+    // Auto-decline other pending interview offers (NOT for Solar - they can interview with multiple systems)
+    // When an applicant schedules with one system (Electric/Combustion), cancel offers from other systems
+    let declinedOffers: string[] = [];
+    
+    if (application.team !== Team.SOLAR) {
+      const otherOffers = offers.filter(
+        (o) => o.system !== system && o.status === InterviewEventStatus.PENDING
+      );
+      
+      for (const otherOffer of otherOffers) {
+        try {
+          await updateInterviewOfferStatus(id, otherOffer.system, {
+            status: InterviewEventStatus.CANCELLED,
+            cancelReason: `Applicant chose to interview with ${system}`,
+          });
+          declinedOffers.push(otherOffer.system);
+          logger.info(
+            { applicationId: id, declinedSystem: otherOffer.system, chosenSystem: system },
+            "Auto-declined interview offer"
+          );
+        } catch (err) {
+          logger.error(
+            { err, applicationId: id, system: otherOffer.system },
+            "Failed to auto-decline interview offer"
+          );
+          // Continue - don't fail the whole request if one decline fails
+        }
+      }
+    }
+
     return NextResponse.json({
       success: true,
       eventId,
       scheduledAt: startDate.toISOString(),
       scheduledEndAt: endDate.toISOString(),
       application: updatedApplication,
+      declinedOffers,
     });
   } catch (error) {
     logger.error({ err: error }, "Failed to schedule interview");
