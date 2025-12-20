@@ -2,10 +2,35 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Search, User } from "lucide-react";
+import { Search, User, LogOut } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { signOut } from "@/lib/firebase/auth";
 
 export function AdminShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Close menu when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setShowUserMenu(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const handleLogout = async () => {
+    try {
+      await signOut();
+      await fetch("/api/auth/logout", { method: "POST" });
+      window.location.href = "/";
+    } catch (error) {
+      console.error("Logout failed:", error);
+    }
+  };
 
   const navItems = [
     { label: "Dashboard", href: "/admin/dashboard" },
@@ -58,9 +83,26 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                 className="h-9 w-64 rounded-md bg-neutral-900 border border-white/10 pl-9 pr-4 text-sm text-white placeholder:text-neutral-500 focus:outline-none focus:ring-1 focus:ring-orange-500/50"
               />
             </div>
-            <button className="h-8 w-8 rounded-full bg-orange-500/10 flex items-center justify-center text-orange-500 hover:bg-orange-500/20 transition-colors">
+            <div className="relative" ref={menuRef}>
+              <button 
+                onClick={() => setShowUserMenu(!showUserMenu)}
+                className="h-8 w-8 rounded-full bg-orange-500/10 flex items-center justify-center text-orange-500 hover:bg-orange-500/20 transition-colors"
+              >
                 <User className="h-4 w-4" />
-            </button>
+              </button>
+              
+              {showUserMenu && (
+                <div className="absolute right-0 mt-2 w-40 rounded-md bg-neutral-900 border border-white/10 shadow-lg py-1 z-50">
+                  <button
+                    onClick={handleLogout}
+                    className="w-full px-4 py-2 text-sm text-left text-neutral-300 hover:bg-neutral-800 hover:text-white flex items-center gap-2 transition-colors"
+                  >
+                    <LogOut className="h-4 w-4" />
+                    Log Out
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </header>

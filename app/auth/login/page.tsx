@@ -29,8 +29,15 @@ export default function LoginPage() {
       const data = await response.json();
 
       if (response.ok) {
-        // Redirect based on role
-        if (data.role === UserRole.ADMIN) {
+        // Redirect based on role - staff roles go to admin dashboard
+        const staffRoles = [
+          UserRole.ADMIN,
+          UserRole.TEAM_CAPTAIN_OB,
+          UserRole.SYSTEM_LEAD,
+          UserRole.REVIEWER
+        ];
+        
+        if (staffRoles.includes(data.role)) {
            window.location.href = "/admin/dashboard";
         } else {
            window.location.href = "/dashboard";

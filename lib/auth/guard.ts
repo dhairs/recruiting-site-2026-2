@@ -1,6 +1,10 @@
 import { cookies } from "next/headers";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { UserRole } from "@/lib/models/User";
+import { redirect } from "next/navigation";
+
+// Error message that indicates the Firebase user record was deleted
+const USER_NOT_FOUND_ERROR = "no user record";
 
 export async function requireAdmin() {
   const cookieStore = await cookies();
@@ -27,6 +31,17 @@ export async function requireAdmin() {
     return { uid, user: userData };
   } catch (error) {
     console.error("Admin auth check failed:", error);
+    
+    // If the Firebase user record was deleted, clear the stale session
+    const errorMessage = error instanceof Error ? error.message.toLowerCase() : "";
+    if (errorMessage.includes(USER_NOT_FOUND_ERROR)) {
+      // Clear cookies and redirect to logout
+      const cookieStore = await cookies();
+      cookieStore.delete("session");
+      cookieStore.delete("user_role");
+      redirect("/auth/login");
+    }
+    
     throw new Error(error instanceof Error ? error.message : "Unauthorized");
   }
 }
@@ -63,6 +78,17 @@ export async function requireStaff() {
     return { uid, user: userData };
   } catch (error) {
     console.error("Staff auth check failed:", error);
+    
+    // If the Firebase user record was deleted, clear the stale session
+    const errorMessage = error instanceof Error ? error.message.toLowerCase() : "";
+    if (errorMessage.includes(USER_NOT_FOUND_ERROR)) {
+      // Clear cookies and redirect to logout
+      const cookieStore = await cookies();
+      cookieStore.delete("session");
+      cookieStore.delete("user_role");
+      redirect("/auth/login");
+    }
+    
     throw new Error(error instanceof Error ? error.message : "Unauthorized");
   }
 }

@@ -86,6 +86,15 @@ export async function POST(request: Request) {
     );
 
     response.cookies.set(options);
+    
+    // Set user_role cookie for middleware role checks
+    response.cookies.set({
+      name: "user_role",
+      value: role.toLowerCase(),
+      maxAge: expiresIn,
+      httpOnly: false, // Needs to be readable by middleware
+      secure: process.env.NODE_ENV === "production",
+    });
 
     return response;
   } catch (error) {

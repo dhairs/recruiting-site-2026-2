@@ -73,6 +73,57 @@ function getStatusLabel(status: string): string {
   return STATUS_LABELS[status] || status;
 }
 
+/**
+ * Get the display status for an application based on the current user's role/system.
+ * 
+ * Logic:
+ * - For Admins/Team Captains: Show app.status (global view)
+ * - For System Leads/Reviewers:
+ *   - If their system has rejected, show "Rejected"
+ *   - If app is globally rejected but their system hasn't rejected, show the previous stage
+ *   - Otherwise show app.status
+ */
+function getDisplayStatusForUser(
+  app: ApplicationWithUser,
+  user: User | null
+): ApplicationStatus {
+  // Admins and Team Captains see the global status
+  if (!user ||
+      user.role === UserRole.ADMIN ||
+      user.role === UserRole.TEAM_CAPTAIN_OB) {
+    return app.status;
+  }
+
+  // For System Leads and Reviewers
+  const userSystem = user.memberProfile?.system;
+  if (!userSystem) {
+    return app.status;
+  }
+
+  // Check if the user's system has rejected this applicant
+  const rejectedBySystems = app.rejectedBySystems || [];
+  const userSystemRejected = rejectedBySystems.includes(userSystem);
+
+  if (userSystemRejected) {
+    return ApplicationStatus.REJECTED;
+  }
+
+  // If the app is globally rejected but user's system hasn't rejected,
+  // show the stage the applicant was at when rejected
+  if (app.status === ApplicationStatus.REJECTED) {
+    // Determine from offers what stage they were at
+    if (app.trialOffers && app.trialOffers.length > 0) {
+      return ApplicationStatus.TRIAL;
+    }
+    if (app.interviewOffers && app.interviewOffers.length > 0) {
+      return ApplicationStatus.INTERVIEW;
+    }
+    return ApplicationStatus.SUBMITTED;
+  }
+
+  return app.status;
+}
+
 export default function AdminApplicationsPage() {
   const [applications, setApplications] = useState<ApplicationWithUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -82,6 +133,7 @@ export default function AdminApplicationsPage() {
   const [statusFilters, setStatusFilters] = useState<ApplicationStatus[]>([]);
   const [systemFilters, setSystemFilters] = useState<string[]>([]);
   const [teamFilters, setTeamFilters] = useState<string[]>([]);
+  const [showOnlyUnreviewedByMySystem, setShowOnlyUnreviewedByMySystem] = useState(false);
 
   // Extras State
   const [notes, setNotes] = useState<Note[]>([]);
@@ -584,7 +636,20 @@ export default function AdminApplicationsPage() {
     const appSystems = app.preferredSystems || [];
     const matchesSystem = systemFilters.length === 0 || appSystems.some(s => systemFilters.includes(s));
     const matchesTeam = teamFilters.length === 0 || teamFilters.includes(app.team);
-    return matchesName && matchesStatus && matchesSystem && matchesTeam;
+    
+    // Filter for applications not yet reviewed by current user's system
+    let matchesUnreviewedFilter = true;
+    if (showOnlyUnreviewedByMySystem && currentUser?.memberProfile?.system) {
+      const userSystem = currentUser.memberProfile.system;
+      // Check if user's system has made any decision (offer or rejection)
+      const hasInterviewOffer = app.interviewOffers?.some(o => o.system === userSystem);
+      const hasTrialOffer = app.trialOffers?.some(o => o.system === userSystem);
+      const hasRejected = app.rejectedBySystems?.includes(userSystem);
+      // Only show if NOT reviewed by user's system
+      matchesUnreviewedFilter = !hasInterviewOffer && !hasTrialOffer && !hasRejected;
+    }
+    
+    return matchesName && matchesStatus && matchesSystem && matchesTeam && matchesUnreviewedFilter;
   });
 
 
@@ -710,9 +775,25 @@ export default function AdminApplicationsPage() {
                 </>
               );
             })()}
-            {(statusFilters.length > 0 || systemFilters.length > 0 || teamFilters.length > 0) && (
+            {/* Unreviewed by My System toggle - only show for users with a system */}
+            {currentUser?.memberProfile?.system && (
+              <>
+                <div className="text-xs text-neutral-500 mb-1 mt-3">Quick Filter</div>
+                <button
+                  onClick={() => setShowOnlyUnreviewedByMySystem(prev => !prev)}
+                  className={`px-2 py-1 text-xs rounded-md border transition-colors ${
+                    showOnlyUnreviewedByMySystem
+                      ? 'bg-purple-500/20 border-purple-500/50 text-purple-400'
+                      : 'bg-neutral-800 border-white/10 text-neutral-400 hover:border-white/20'
+                  }`}
+                >
+                  Unreviewed by {currentUser.memberProfile.system}
+                </button>
+              </>
+            )}
+            {(statusFilters.length > 0 || systemFilters.length > 0 || teamFilters.length > 0 || showOnlyUnreviewedByMySystem) && (
               <button
-                onClick={() => { setStatusFilters([]); setSystemFilters([]); setTeamFilters([]); }}
+                onClick={() => { setStatusFilters([]); setSystemFilters([]); setTeamFilters([]); setShowOnlyUnreviewedByMySystem(false); }}
                 className="mt-2 text-xs text-neutral-500 hover:text-white transition-colors"
               >
                 Clear filters
@@ -744,7 +825,7 @@ export default function AdminApplicationsPage() {
                   <span>•</span>
                   <span>{(app.preferredSystems?.length ? app.preferredSystems.join(", ") : "General")}</span>
                 </div>
-                <StatusBadge status={app.status} />
+                <StatusBadge status={getDisplayStatusForUser(app, currentUser)} />
              </div>
            ))}
            {filteredApplications.length === 0 && (
