@@ -1031,10 +1031,25 @@ export async function rejectApplicationFromSystems(
       updatedAt: FieldValue.serverTimestamp(),
     };
 
-    // Update stage decisions based on whether any interview offers still exist
-    // If we had interview offers, this is an interview-stage rejection, so set interviewDecision
-    // The reviewDecision should remain 'advanced' since they were already advanced to interviews
-    if (existingOffers.length > 0) {
+    // Check for Trial offers FIRST, as an applicant in Trial stage will have both Trial and Interview offers
+    // We want to handle them as Trial stage applicants.
+    if (existingTrialOffers.length > 0) {
+      // Handle trial stage rejection
+      const nonRejectedTrialSystems = existingTrialOffers
+        .map(o => o.system)
+        .filter(sys => !newRejections.includes(sys));
+      
+      if (nonRejectedTrialSystems.length === 0) {
+        // All trial offers rejected
+        updateData.trialDecision = 'rejected';
+        // IMPORTANT: Preserve trialOffers so the UI doesn't change and give away rejection
+        // updateData.trialOffers = []; 
+        updateData.status = ApplicationStatus.REJECTED;
+      }
+    } else if (existingOffers.length > 0) {
+      // Update stage decisions based on whether any interview offers still exist
+      // If we had interview offers, this is an interview-stage rejection, so set interviewDecision
+      // The reviewDecision should remain 'advanced' since they were already advanced to interviews
       if (hasActiveInterviewOffers) {
         // Some interview offers remain - keep reviewDecision as 'advanced'
         updateData.reviewDecision = 'advanced';
@@ -1044,18 +1059,6 @@ export async function rejectApplicationFromSystems(
         // IMPORTANT: Preserve interviewOffers so the UI doesn't change and give away rejection
         updateData.reviewDecision = 'advanced';
         updateData.interviewDecision = 'rejected';
-        updateData.status = ApplicationStatus.REJECTED;
-      }
-    } else if (existingTrialOffers.length > 0) {
-      // Handle trial stage rejection
-      const nonRejectedTrialSystems = existingTrialOffers
-        .map(o => o.system)
-        .filter(sys => !newRejections.includes(sys));
-      
-      if (nonRejectedTrialSystems.length === 0) {
-        // All trial offers rejected
-        updateData.trialDecision = 'rejected';
-        updateData.trialOffers = [];
         updateData.status = ApplicationStatus.REJECTED;
       }
     } else {

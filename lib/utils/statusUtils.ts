@@ -34,6 +34,11 @@ export function getStageDecisionForStatus(
   currentStatus: ApplicationStatus,
   newStatus: ApplicationStatus
 ): { field: 'reviewDecision' | 'interviewDecision' | 'trialDecision' | null; decision: StageDecision } {
+  // If accepting, always set the trial decision to advanced (final stage passed)
+  if (newStatus === ApplicationStatus.ACCEPTED) {
+    return { field: 'trialDecision', decision: 'advanced' };
+  }
+
   // Moving from submitted/in_progress to interview or rejected
   if (currentStatus === ApplicationStatus.SUBMITTED || currentStatus === ApplicationStatus.IN_PROGRESS) {
     if (newStatus === ApplicationStatus.INTERVIEW) {
@@ -54,11 +59,8 @@ export function getStageDecisionForStatus(
     }
   }
   
-  // Moving from trial to accepted or rejected
+  // Moving from trial to rejected
   if (currentStatus === ApplicationStatus.TRIAL) {
-    if (newStatus === ApplicationStatus.ACCEPTED) {
-      return { field: 'trialDecision', decision: 'advanced' };
-    }
     if (newStatus === ApplicationStatus.REJECTED) {
       return { field: 'trialDecision', decision: 'rejected' };
     }

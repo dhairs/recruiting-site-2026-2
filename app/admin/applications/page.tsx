@@ -136,6 +136,14 @@ export default function AdminApplicationsPage() {
   const [showTrialModal, setShowTrialModal] = useState(false);
   const [selectedTrialSystems, setSelectedTrialSystems] = useState<string[]>([]);
 
+  // Acceptance modal state
+  const [showAcceptModal, setShowAcceptModal] = useState(false);
+  const [acceptFormData, setAcceptFormData] = useState<{
+    system: string;
+    role: string;
+    details: string;
+  }>({ system: '', role: 'Member', details: '' });
+
   // Interview detail modal state
   const [showInterviewDetailModal, setShowInterviewDetailModal] = useState(false);
   const [selectedInterviewOffer, setSelectedInterviewOffer] = useState<InterviewOffer | null>(null);
@@ -293,14 +301,14 @@ export default function AdminApplicationsPage() {
     }
   };
 
-  const handleStatusUpdate = async (status: ApplicationStatus, systems?: string[]) => {
+  const handleStatusUpdate = async (status: ApplicationStatus, systems?: string[], offer?: any) => {
     if (!selectedAppId) return;
     setStatusLoading(true);
     try {
         const res = await fetch(`/api/admin/applications/${selectedAppId}/status`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ status, systems }),
+            body: JSON.stringify({ status, systems, offer }),
         });
         const data = await res.json();
         
@@ -314,6 +322,7 @@ export default function AdminApplicationsPage() {
             toast.success(`Status updated to ${status.replace("_", " ")}`);
             setShowInterviewModal(false);
             setShowTrialModal(false);
+            setShowAcceptModal(false);
         } else {
             toast.error(data.error || "Failed to update status");
         }
@@ -325,6 +334,16 @@ export default function AdminApplicationsPage() {
     }
   };
 
+  const handleAcceptSubmit = () => {
+    if (!acceptFormData.system) {
+        toast.error("Please select a system");
+        return;
+    }
+    handleStatusUpdate(ApplicationStatus.ACCEPTED, undefined, acceptFormData);
+  };
+
+  // Handle Advance button click - show modal for higher roles, auto-advance for reviewers
+  // When recruiting step is INTERVIEWING, show trial modal; otherwise show interview modal
   // Handle Advance button click - show modal for higher roles, auto-advance for reviewers
   // When recruiting step is INTERVIEWING, show trial modal; otherwise show interview modal
   const handleAdvanceClick = () => {
@@ -332,6 +351,20 @@ export default function AdminApplicationsPage() {
     
     // Determine if we're in trial mode (recruitingStep is INTERVIEWING)
     const isTrialMode = recruitingStep === RecruitingStep.INTERVIEWING;
+    const isDecisionMode = recruitingStep === RecruitingStep.RELEASE_TRIAL || 
+                          recruitingStep === RecruitingStep.TRIAL_WORKDAY || 
+                          recruitingStep === RecruitingStep.RELEASE_DECISIONS;
+
+    if (isDecisionMode) {
+      // Show acceptance modal
+      setAcceptFormData({
+        system: selectedApp.preferredSystems?.[0] || '',
+        role: 'Member',
+        details: ''
+      });
+      setShowAcceptModal(true);
+      return;
+    }
     
     // For Reviewers, auto-use their system
     if (currentUser?.role === UserRole.REVIEWER) {
@@ -1742,6 +1775,73 @@ export default function AdminApplicationsPage() {
                 className="flex-1 py-2 rounded-lg bg-red-600 text-white font-medium hover:bg-red-500 transition-colors disabled:opacity-50"
               >
                 {statusLoading ? "Rejecting..." : `Reject (${selectedRejectSystems.length})`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Accept Application Modal */}
+      {showAcceptModal && selectedApp && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-neutral-900 border border-white/10 rounded-2xl p-6 max-w-md w-full mx-4 shadow-2xl">
+            <h3 className="text-xl font-bold text-white mb-6">Accept Application</h3>
+            
+            <div className="space-y-4 mb-6">
+              {/* System */}
+              <div>
+                <label className="block text-sm font-medium text-neutral-400 mb-2">System</label>
+                <select
+                  value={acceptFormData.system}
+                  onChange={(e) => setAcceptFormData({ ...acceptFormData, system: e.target.value })}
+                  className="w-full bg-neutral-800 border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-green-500"
+                >
+                  <option value="" disabled>Select a system</option>
+                  {getTeamSystemOptions().map(sys => (
+                    <option key={sys.value} value={sys.value}>{sys.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Role */}
+              <div>
+                <label className="block text-sm font-medium text-neutral-400 mb-2">Role</label>
+                <select
+                  value={acceptFormData.role}
+                  onChange={(e) => setAcceptFormData({ ...acceptFormData, role: e.target.value })}
+                  className="w-full bg-neutral-800 border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-green-500"
+                >
+                  <option value="Member">Member</option>
+                  <option value="Lead">Lead</option>
+                  <option value="Co-Lead">Co-Lead</option>
+                </select>
+              </div>
+              
+              {/* Details / Notes */}
+              <div>
+                <label className="block text-sm font-medium text-neutral-400 mb-2">Additional Offer Details (Optional)</label>
+                <textarea
+                  value={acceptFormData.details}
+                  onChange={(e) => setAcceptFormData({ ...acceptFormData, details: e.target.value })}
+                  placeholder="e.g., Specific responsibilities, project assignment..."
+                  className="w-full bg-neutral-800 border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-green-500 min-h-[100px]"
+                />
+              </div>
+            </div>
+            
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowAcceptModal(false)}
+                className="flex-1 py-2 rounded-lg bg-neutral-800 text-white font-medium hover:bg-neutral-700 transition-colors border border-white/10"
+              >
+                Cancel
+              </button>
+              <button
+                disabled={!acceptFormData.system || statusLoading}
+                onClick={handleAcceptSubmit}
+                className="flex-1 py-2 rounded-lg bg-green-600 text-white font-medium hover:bg-green-500 transition-colors disabled:opacity-50"
+              >
+                {statusLoading ? "Accepting..." : "Accept Applicant"}
               </button>
             </div>
           </div>

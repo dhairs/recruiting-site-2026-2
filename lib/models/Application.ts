@@ -78,6 +78,14 @@ export interface Application {
   interviewDecision?: StageDecision;   // Decision from interview stage  
   trialDecision?: StageDecision;       // Decision from trial stage
 
+  // Offer Details
+  offer?: {
+    system: string;
+    role: string;
+    details?: string;
+    issuedAt: Date;
+  };
+
   createdAt: Date;
   updatedAt: Date;
   submittedAt?: Date;
@@ -99,4 +107,3 @@ export interface ApplicationCreateData {
   userId: string;
   team: Team;
 }
-

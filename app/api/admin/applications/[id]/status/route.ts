@@ -31,7 +31,7 @@ export async function POST(
     const currentUser = userDoc.data() as User;
 
     const body = await request.json();
-    const { status, systems } = body; // systems is optional array of system names
+      const { status, systems, offer } = body; // systems is optional array of system names, offer is optional offer details
 
     if (!Object.values(ApplicationStatus).includes(status)) {
        return NextResponse.json({ error: "Invalid status" }, { status: 400 });
@@ -135,18 +135,31 @@ export async function POST(
       if (field) {
         updateData[field] = decision;
       }
+
+      // If accepting, save offer details if provided
+      if (status === ApplicationStatus.ACCEPTED && offer) {
+        updateData.offer = {
+          ...offer,
+          issuedAt: new Date()
+        };
+      }
       
       // If rejecting from interview stage, clear interview offers
       if (application.status === ApplicationStatus.INTERVIEW && status === ApplicationStatus.REJECTED) {
-        updateData.interviewOffers = [];
-        updateData.selectedInterviewSystem = null;
-        logger.info("Clearing interview offers");
+         // IMPORTANT: Preserve interviewOffers so the UI doesn't change and give away rejection
+         // updateData.interviewOffers = [];
+         
+         // Clear selected system if they haven't started interviewing? 
+         // Actually, better to preserve everything.
+         // updateData.selectedInterviewSystem = null;
+         logger.info("Preserving interview offers (rejection masking)");
       }
       
       // If rejecting from trial stage, clear trial offers
       if (application.status === ApplicationStatus.TRIAL && status === ApplicationStatus.REJECTED) {
-        updateData.trialOffers = [];
-        logger.info("Clearing trial offers");
+         // IMPORTANT: Preserve trialOffers so the UI doesn't change and give away rejection
+         // updateData.trialOffers = [];
+         logger.info("Preserving trial offers (rejection masking)");
       }
       
       logger.info({ updateData }, "About to update application with data");
