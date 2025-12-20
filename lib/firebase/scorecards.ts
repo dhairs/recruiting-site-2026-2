@@ -137,6 +137,7 @@ export async function canUserModifyConfig(userUid: string, configTeam: Team, con
 
 /**
  * Create a new scorecard configuration.
+ * Uses a Firestore transaction to prevent race conditions.
  */
 export async function createScorecardConfig(
   config: Omit<ScorecardConfig, 'id' | 'createdAt' | 'updatedAt'>,
@@ -149,23 +150,25 @@ export async function createScorecardConfig(
   const docId = generateScorecardConfigId(config.team, config.system);
   const docRef = adminDb.collection(CONFIG_COLLECTION).doc(docId);
 
-  // Check if config already exists
-  const existing = await docRef.get();
-  if (existing.exists) {
-    throw new Error(`Scorecard config for ${config.team} - ${config.system} already exists`);
-  }
+  return await adminDb.runTransaction(async (transaction) => {
+    const existing = await transaction.get(docRef);
+    
+    if (existing.exists) {
+      throw new Error(`Scorecard config for ${config.team} - ${config.system} already exists`);
+    }
 
-  const now = new Date();
-  const newConfig: ScorecardConfig = {
-    ...config,
-    id: docId,
-    createdAt: now,
-    updatedAt: now,
-    createdBy: creatorUid,
-  };
+    const now = new Date();
+    const newConfig: ScorecardConfig = {
+      ...config,
+      id: docId,
+      createdAt: now,
+      updatedAt: now,
+      createdBy: creatorUid,
+    };
 
-  await docRef.set(newConfig);
-  return newConfig;
+    transaction.set(docRef, newConfig);
+    return newConfig;
+  });
 }
 
 /**

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
-import { updateApplication, addInterviewOffer, getApplication } from "@/lib/firebase/applications";
+import { updateApplication, addMultipleInterviewOffers, getApplication } from "@/lib/firebase/applications";
 import { ApplicationStatus } from "@/lib/models/Application";
 import { UserRole, User } from "@/lib/models/User";
 import pino from "pino";
@@ -72,30 +72,8 @@ export async function POST(
         systemsToOffer = preferred;
       }
 
-      // Create interview offers for each system
-      const existingOfferSystems = new Set(
-        application.interviewOffers?.map(o => o.system) || []
-      );
-
-      for (const system of systemsToOffer) {
-        if (!existingOfferSystems.has(system)) {
-          await addInterviewOffer(id, system);
-        }
-      }
-
-      // Remove offered systems from rejectedBySystems list (un-reject if previously rejected)
-      const currentRejections = application.rejectedBySystems || [];
-      const updatedRejections = currentRejections.filter(
-        sys => !systemsToOffer.includes(sys)
-      );
-      
-      // Update rejectedBySystems if there were removals
-      if (updatedRejections.length !== currentRejections.length) {
-        await updateApplication(id, { rejectedBySystems: updatedRejections });
-      }
-
-      // Get updated application
-      updatedApp = await getApplication(id);
+      // Atomically create interview offers and un-reject systems in a single transaction
+      updatedApp = await addMultipleInterviewOffers(id, systemsToOffer);
     } else {
       // For other status changes, just update the status
       updatedApp = await updateApplication(id, { status });

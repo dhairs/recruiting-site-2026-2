@@ -86,13 +86,6 @@ export async function POST(request: Request) {
     );
 
     response.cookies.set(options);
-    response.cookies.set({
-      name: "user_role",
-      value: role,
-      maxAge: expiresIn,
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-    });
 
     return response;
   } catch (error) {

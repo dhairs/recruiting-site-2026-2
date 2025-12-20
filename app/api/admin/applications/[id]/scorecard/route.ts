@@ -121,6 +121,12 @@ export async function GET(
     const userId = decodedToken.uid;
     const user = await getUser(userId);
 
+    // Verify user has staff-level access
+    const staffRoles = [UserRole.ADMIN, UserRole.TEAM_CAPTAIN_OB, UserRole.SYSTEM_LEAD, UserRole.REVIEWER];
+    if (!user || !staffRoles.includes(user.role)) {
+      return NextResponse.json({ error: "Forbidden: Staff access required" }, { status: 403 });
+    }
+
     const application = await getApplication(id);
     if (!application) {
        return NextResponse.json({ error: "Application not found" }, { status: 404 });
@@ -236,42 +242,35 @@ export async function POST(
     const userId = decodedToken.uid;
     const user = await getUser(userId);
 
+    // Verify user has staff-level access
+    const staffRoles = [UserRole.ADMIN, UserRole.TEAM_CAPTAIN_OB, UserRole.SYSTEM_LEAD, UserRole.REVIEWER];
+    if (!user || !staffRoles.includes(user.role)) {
+      return NextResponse.json({ error: "Forbidden: Staff access required" }, { status: 403 });
+    }
+
     const body = await request.json();
     const { data, system } = body;
 
     const collectionRef = adminDb.collection("applications").doc(id).collection("scorecards");
     
-    // Build query - look for existing submission by this user for this system
-    let existingQuery = collectionRef.where("reviewerId", "==", userId);
-    if (system) {
-      existingQuery = existingQuery.where("system", "==", system);
-    }
+    // Use a deterministic document ID based on reviewerId and system for idempotency
+    // This prevents race conditions where concurrent requests create duplicate scorecards
+    const docId = system ? `${userId}_${system.toLowerCase().replace(/\s+/g, '-')}` : userId;
+    const docRef = collectionRef.doc(docId);
     
-    const snapshot = await existingQuery.limit(1).get();
+    // Use set with merge to make this idempotent - creates if not exists, updates if exists
+    const submissionData: ScorecardSubmission = {
+      id: docId,
+      applicationId: id,
+      reviewerId: userId,
+      reviewerName: user?.name || "Unknown",
+      system: system || undefined,
+      data,
+      submittedAt: new Date(),
+      updatedAt: new Date(),
+    };
     
-    if (!snapshot.empty) {
-        // Update existing submission
-        const docId = snapshot.docs[0].id;
-        await collectionRef.doc(docId).update({
-            data,
-            system: system || null,
-            updatedAt: new Date()
-        });
-    } else {
-        // Create new submission
-        const docRef = collectionRef.doc();
-        const submission: ScorecardSubmission = {
-            id: docRef.id,
-            applicationId: id,
-            reviewerId: userId,
-            reviewerName: user?.name || "Unknown",
-            system: system || undefined,
-            data,
-            submittedAt: new Date(),
-            updatedAt: new Date(),
-        };
-        await docRef.set(submission);
-    }
+    await docRef.set(submissionData, { merge: true });
 
     return NextResponse.json({ success: true });
 

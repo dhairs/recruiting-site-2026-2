@@ -11,5 +11,5 @@ export async function userExists(user: UserRecord) {
 }
 
 export async function updateUserData(user: User) {
-  adminDb.doc(`users/${user.uid}`).create(user);
+  await adminDb.doc(`users/${user.uid}`).set(user, { merge: true });
 }

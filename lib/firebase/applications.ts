@@ -314,40 +314,135 @@ export async function updateApplicationFormData(
  * This is typically called by an admin/reviewer when extending an interview.
  * The system parameter is the name of the system offering the interview (e.g., "Electronics").
  * Calendar and interviewer info is looked up from interviewConfigs when scheduling.
+ * Uses a Firestore transaction to prevent race conditions.
  */
 export async function addInterviewOffer(
   applicationId: string,
   system: string
 ): Promise<Application | null> {
-  const application = await getApplication(applicationId);
-  if (!application) {
-    return null;
+  const applicationRef = adminDb.collection(APPLICATIONS_COLLECTION).doc(applicationId);
+
+  return await adminDb.runTransaction(async (transaction) => {
+    const doc = await transaction.get(applicationRef);
+    
+    if (!doc.exists) {
+      return null;
+    }
+
+    const data = doc.data()!;
+    const existingOffers = normalizeInterviewOffers(data.interviewOffers) || [];
+
+    // Check if offer for this system already exists
+    if (existingOffers.some((o) => o.system === system)) {
+      throw new Error(`Interview offer for ${system} already exists`);
+    }
+
+    const newOffer: InterviewOffer = {
+      system,
+      status: InterviewEventStatus.PENDING,
+      createdAt: new Date(),
+    };
+
+    const updatedOffers = [...existingOffers, newOffer];
+
+    // Prepare update data
+    const updateData: Record<string, unknown> = {
+      interviewOffers: updatedOffers.map(prepareOfferForFirestore),
+      updatedAt: FieldValue.serverTimestamp(),
+    };
+
+    // Also update status to INTERVIEW if not already
+    if (data.status !== ApplicationStatus.INTERVIEW) {
+      updateData.status = ApplicationStatus.INTERVIEW;
+    }
+
+    transaction.update(applicationRef, updateData);
+
+    // Return the updated application data
+    return {
+      ...data,
+      id: doc.id,
+      interviewOffers: updatedOffers,
+      status: updateData.status || data.status,
+      createdAt: data.createdAt?.toDate() || new Date(),
+      updatedAt: new Date(),
+      submittedAt: data.submittedAt?.toDate(),
+    } as Application;
+  });
+}
+
+/**
+ * Add multiple interview offers to an application atomically.
+ * Also handles un-rejecting systems and updating status.
+ * Uses a single Firestore transaction to prevent race conditions.
+ */
+export async function addMultipleInterviewOffers(
+  applicationId: string,
+  systems: string[]
+): Promise<Application | null> {
+  if (systems.length === 0) {
+    return getApplication(applicationId);
   }
 
-  // Check if offer for this system already exists
-  const existingOffers = application.interviewOffers || [];
-  if (existingOffers.some((o) => o.system === system)) {
-    throw new Error(`Interview offer for ${system} already exists`);
-  }
+  const applicationRef = adminDb.collection(APPLICATIONS_COLLECTION).doc(applicationId);
 
-  const newOffer: InterviewOffer = {
-    system,
-    status: InterviewEventStatus.PENDING,
-    createdAt: new Date(),
-  };
+  return await adminDb.runTransaction(async (transaction) => {
+    const doc = await transaction.get(applicationRef);
+    
+    if (!doc.exists) {
+      return null;
+    }
 
-  const updatedOffers = [...existingOffers, newOffer];
+    const data = doc.data()!;
+    const existingOffers = normalizeInterviewOffers(data.interviewOffers) || [];
+    const existingOfferSystems = new Set(existingOffers.map((o) => o.system));
+    
+    // Create new offers only for systems that don't already have one
+    const newOffers: InterviewOffer[] = [];
+    for (const system of systems) {
+      if (!existingOfferSystems.has(system)) {
+        newOffers.push({
+          system,
+          status: InterviewEventStatus.PENDING,
+          createdAt: new Date(),
+        });
+      }
+    }
 
-  // Also update status to INTERVIEW if not already
-  const updates: Partial<Application> = {
-    interviewOffers: updatedOffers,
-  };
+    const updatedOffers = [...existingOffers, ...newOffers];
 
-  if (application.status !== ApplicationStatus.INTERVIEW) {
-    updates.status = ApplicationStatus.INTERVIEW;
-  }
+    // Un-reject systems that are getting offers
+    const currentRejections = (data.rejectedBySystems || []) as string[];
+    const updatedRejections = currentRejections.filter(
+      (sys) => !systems.includes(sys)
+    );
 
-  return updateApplication(applicationId, updates);
+    // Prepare update data
+    const updateData: Record<string, unknown> = {
+      interviewOffers: updatedOffers.map(prepareOfferForFirestore),
+      rejectedBySystems: updatedRejections,
+      updatedAt: FieldValue.serverTimestamp(),
+    };
+
+    // Update status to INTERVIEW if not already
+    if (data.status !== ApplicationStatus.INTERVIEW) {
+      updateData.status = ApplicationStatus.INTERVIEW;
+    }
+
+    transaction.update(applicationRef, updateData);
+
+    // Return the updated application data
+    return {
+      ...data,
+      id: doc.id,
+      interviewOffers: updatedOffers,
+      rejectedBySystems: updatedRejections,
+      status: updateData.status || data.status,
+      createdAt: data.createdAt?.toDate() || new Date(),
+      updatedAt: new Date(),
+      submittedAt: data.submittedAt?.toDate(),
+    } as Application;
+  });
 }
 
 /**
@@ -380,6 +475,7 @@ export async function selectInterviewSystem(
 /**
  * Update the status of a specific interview offer.
  * Used when scheduling, cancelling, or marking interviews as complete.
+ * Uses a Firestore transaction to prevent race conditions.
  */
 export async function updateInterviewOfferStatus(
   applicationId: string,
@@ -392,39 +488,124 @@ export async function updateInterviewOfferStatus(
     cancelReason?: string;
   }
 ): Promise<Application | null> {
-  const application = await getApplication(applicationId);
-  if (!application) {
-    return null;
+  const applicationRef = adminDb.collection(APPLICATIONS_COLLECTION).doc(applicationId);
+
+  return await adminDb.runTransaction(async (transaction) => {
+    const doc = await transaction.get(applicationRef);
+
+    if (!doc.exists) {
+      return null;
+    }
+
+    const data = doc.data()!;
+    const offers = normalizeInterviewOffers(data.interviewOffers) || [];
+    const offerIndex = offers.findIndex((o) => o.system === system);
+
+    if (offerIndex === -1) {
+      throw new Error(`No interview offer found for system: ${system}`);
+    }
+
+    const updatedOffer: InterviewOffer = {
+      ...offers[offerIndex],
+      status: statusUpdate.status,
+    };
+
+    // Add additional fields based on status
+    if (statusUpdate.status === InterviewEventStatus.SCHEDULED) {
+      updatedOffer.eventId = statusUpdate.eventId;
+      updatedOffer.scheduledAt = statusUpdate.scheduledAt;
+      updatedOffer.scheduledEndAt = statusUpdate.scheduledEndAt;
+      updatedOffer.scheduledOnDate = new Date();
+    } else if (statusUpdate.status === InterviewEventStatus.CANCELLED) {
+      updatedOffer.cancelledAt = new Date();
+      updatedOffer.cancelReason = statusUpdate.cancelReason;
+    }
+
+    const updatedOffers = [...offers];
+    updatedOffers[offerIndex] = updatedOffer;
+
+    transaction.update(applicationRef, {
+      interviewOffers: updatedOffers.map(prepareOfferForFirestore),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+
+    // Return the updated application data
+    return {
+      ...data,
+      id: doc.id,
+      interviewOffers: updatedOffers,
+      createdAt: data.createdAt?.toDate() || new Date(),
+      updatedAt: new Date(),
+      submittedAt: data.submittedAt?.toDate(),
+    } as Application;
+  });
+}
+
+/**
+ * Reject an applicant from specific systems atomically.
+ * Removes interview offers for the specified systems and updates rejectedBySystems.
+ * If no interview offers remain, sets status to REJECTED.
+ * Uses a Firestore transaction to prevent race conditions.
+ */
+export async function rejectApplicationFromSystems(
+  applicationId: string,
+  systems: string[]
+): Promise<{ application: Application | null; fullyRejected: boolean }> {
+  if (systems.length === 0) {
+    const app = await getApplication(applicationId);
+    return { application: app, fullyRejected: false };
   }
 
-  const offers = application.interviewOffers || [];
-  const offerIndex = offers.findIndex((o) => o.system === system);
+  const applicationRef = adminDb.collection(APPLICATIONS_COLLECTION).doc(applicationId);
 
-  if (offerIndex === -1) {
-    throw new Error(`No interview offer found for system: ${system}`);
-  }
+  return await adminDb.runTransaction(async (transaction) => {
+    const doc = await transaction.get(applicationRef);
 
-  const updatedOffer: InterviewOffer = {
-    ...offers[offerIndex],
-    status: statusUpdate.status,
-  };
+    if (!doc.exists) {
+      return { application: null, fullyRejected: false };
+    }
 
-  // Add additional fields based on status
-  if (statusUpdate.status === InterviewEventStatus.SCHEDULED) {
-    updatedOffer.eventId = statusUpdate.eventId;
-    updatedOffer.scheduledAt = statusUpdate.scheduledAt;
-    updatedOffer.scheduledEndAt = statusUpdate.scheduledEndAt;
-    updatedOffer.scheduledOnDate = new Date();
-  } else if (statusUpdate.status === InterviewEventStatus.CANCELLED) {
-    updatedOffer.cancelledAt = new Date();
-    updatedOffer.cancelReason = statusUpdate.cancelReason;
-  }
+    const data = doc.data()!;
+    const existingOffers = normalizeInterviewOffers(data.interviewOffers) || [];
+    
+    // Remove offers for the specified systems
+    const remainingOffers = existingOffers.filter(
+      (offer) => !systems.includes(offer.system)
+    );
 
-  const updatedOffers = [...offers];
-  updatedOffers[offerIndex] = updatedOffer;
+    // Track rejected systems (add to existing list, avoid duplicates)
+    const existingRejections = (data.rejectedBySystems || []) as string[];
+    const newRejections = [...new Set([...existingRejections, ...systems])];
 
+    // Determine if application should be marked as REJECTED
+    const hasActiveOffers = remainingOffers.length > 0;
 
-  return updateApplication(applicationId, { interviewOffers: updatedOffers });
+    const updateData: Record<string, unknown> = {
+      interviewOffers: remainingOffers.map(prepareOfferForFirestore),
+      rejectedBySystems: newRejections,
+      updatedAt: FieldValue.serverTimestamp(),
+    };
+
+    // Only set status to REJECTED if no active offers remain
+    if (!hasActiveOffers) {
+      updateData.status = ApplicationStatus.REJECTED;
+    }
+
+    transaction.update(applicationRef, updateData);
+
+    const updatedApplication = {
+      ...data,
+      id: doc.id,
+      interviewOffers: remainingOffers,
+      rejectedBySystems: newRejections,
+      status: hasActiveOffers ? data.status : ApplicationStatus.REJECTED,
+      createdAt: data.createdAt?.toDate() || new Date(),
+      updatedAt: new Date(),
+      submittedAt: data.submittedAt?.toDate(),
+    } as Application;
+
+    return { application: updatedApplication, fullyRejected: !hasActiveOffers };
+  });
 }
 
 /**

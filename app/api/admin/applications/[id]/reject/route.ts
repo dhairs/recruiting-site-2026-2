@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
-import { getApplication, updateApplication } from "@/lib/firebase/applications";
-import { ApplicationStatus } from "@/lib/models/Application";
+import { rejectApplicationFromSystems } from "@/lib/firebase/applications";
 import { UserRole, User } from "@/lib/models/User";
 import pino from "pino";
 
@@ -70,42 +69,16 @@ export async function POST(
       systems = [userSystem];
     }
 
-    const application = await getApplication(id);
-    if (!application) {
+    // Atomically reject from the specified systems using a transaction
+    const { application: updatedApp, fullyRejected } = await rejectApplicationFromSystems(id, systems);
+
+    if (!updatedApp) {
       return NextResponse.json({ error: "Application not found" }, { status: 404 });
     }
 
-    // Get existing interview offers
-    const existingOffers = application.interviewOffers || [];
-    
-    // Remove offers for the specified systems
-    const remainingOffers = existingOffers.filter(
-      offer => !systems.includes(offer.system)
-    );
-
-    // Track rejected systems (add to existing list, avoid duplicates)
-    const existingRejections = application.rejectedBySystems || [];
-    const newRejections = [...new Set([...existingRejections, ...systems])];
-
-    // Determine if application should be marked as REJECTED
-    // Only if no offers remain
-    const hasActiveOffers = remainingOffers.length > 0;
-    
-    const updates: Partial<{ interviewOffers: typeof remainingOffers; status: ApplicationStatus; rejectedBySystems: string[] }> = {
-      interviewOffers: remainingOffers,
-      rejectedBySystems: newRejections,
-    };
-
-    // Only set status to REJECTED if no active offers remain
-    if (!hasActiveOffers) {
-      updates.status = ApplicationStatus.REJECTED;
-    }
-
-    const updatedApp = await updateApplication(id, updates);
-
     return NextResponse.json({ 
       application: updatedApp,
-      fullyRejected: !hasActiveOffers 
+      fullyRejected 
     }, { status: 200 });
 
   } catch (error) {
