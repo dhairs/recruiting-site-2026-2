@@ -1217,21 +1217,34 @@ export default function AdminApplicationsPage() {
                     <p className="text-xs text-neutral-500 uppercase tracking-wider mb-2">Trial Workday Offers</p>
                     {selectedApp.trialOffers && selectedApp.trialOffers.length > 0 ? (
                       <div className="space-y-2">
-                        {selectedApp.trialOffers.map((offer, idx) => (
-                          <div 
-                            key={idx} 
-                            className="flex items-center justify-between p-2 bg-neutral-800/50 rounded-lg border border-white/5"
-                          >
-                            <span className="text-sm text-white font-medium">{offer.system}</span>
-                            <span className={clsx(
-                              "px-2 py-0.5 text-xs rounded-full",
-                              offer.status === "pending" && "bg-yellow-500/10 text-yellow-400 border border-yellow-500/20",
-                              offer.status === "completed" && "bg-purple-500/10 text-purple-400 border border-purple-500/20"
-                            )}>
-                              {offer.status.replace("_", " ")}
-                            </span>
-                          </div>
-                        ))}
+                        {selectedApp.trialOffers.map((offer, idx) => {
+                          // Determine display status based on accepted field
+                          const getStatusDisplay = () => {
+                            if (offer.accepted === true) return { label: "Accepted", style: "bg-green-500/10 text-green-400 border border-green-500/20" };
+                            if (offer.accepted === false) return { label: "Declined", style: "bg-red-500/10 text-red-400 border border-red-500/20" };
+                            return { label: "Pending", style: "bg-yellow-500/10 text-yellow-400 border border-yellow-500/20" };
+                          };
+                          const statusDisplay = getStatusDisplay();
+                          
+                          return (
+                            <div 
+                              key={idx} 
+                              className="p-2 bg-neutral-800/50 rounded-lg border border-white/5"
+                            >
+                              <div className="flex items-center justify-between">
+                                <span className="text-sm text-white font-medium">{offer.system}</span>
+                                <span className={clsx("px-2 py-0.5 text-xs rounded-full", statusDisplay.style)}>
+                                  {statusDisplay.label}
+                                </span>
+                              </div>
+                              {offer.accepted === false && offer.rejectionReason && (
+                                <p className="text-xs text-neutral-400 mt-1">
+                                  Reason: {offer.rejectionReason}
+                                </p>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     ) : (
                       <p className="text-neutral-500 text-sm italic">No trial offers yet</p>

@@ -42,6 +42,11 @@ export interface TrialOffer {
   system: string;                      // The system offering the trial (e.g., "Electronics")
   status: InterviewEventStatus;        // Reuse same status enum
   createdAt: Date;                     // When offer was created by admin
+  
+  // Applicant response fields
+  respondedAt?: Date;                  // When applicant responded
+  accepted?: boolean;                  // true = accepted, false = rejected, undefined = pending
+  rejectionReason?: string;            // Reason if rejected
 }
 
 export interface ApplicationFormData {

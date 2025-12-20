@@ -16,6 +16,7 @@ import {
 } from "@/lib/models/Application";
 import { Team } from "@/lib/models/User";
 import { InterviewSlotConfig } from "@/lib/models/Interview";
+import { RecruitingStep, RecruitingConfig } from "@/lib/models/Config";
 import {
   createInterviewEvent,
   cancelInterviewEvent,
@@ -25,6 +26,22 @@ import pino from "pino";
 const logger = pino();
 const INTERVIEW_CONFIGS_COLLECTION = "interviewConfigs";
 const USERS_COLLECTION = "users";
+const RECRUITING_CONFIG_COLLECTION = "config";
+
+/**
+ * Check if interview scheduling is still allowed based on recruiting step
+ */
+async function isInterviewSchedulingAllowed(): Promise<boolean> {
+  const doc = await adminDb.collection(RECRUITING_CONFIG_COLLECTION).doc("recruiting").get();
+  if (!doc.exists) return true; // Default to allowed if no config
+  const config = doc.data() as RecruitingConfig;
+  const blockedSteps = [
+    RecruitingStep.RELEASE_TRIAL,
+    RecruitingStep.TRIAL_WORKDAY,
+    RecruitingStep.RELEASE_DECISIONS,
+  ];
+  return !blockedSteps.includes(config.currentStep as RecruitingStep);
+}
 
 /**
  * Helper to get the current user's UID from the session cookie
@@ -143,6 +160,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     if (application.status !== ApplicationStatus.INTERVIEW) {
       return NextResponse.json(
         { error: "Application is not in interview stage" },
+        { status: 400 }
+      );
+    }
+
+    // Check if interview scheduling is still allowed (blocked after trial release)
+    const schedulingAllowed = await isInterviewSchedulingAllowed();
+    if (!schedulingAllowed) {
+      return NextResponse.json(
+        { error: "Interview scheduling is no longer available. Trial workdays have been released." },
         { status: 400 }
       );
     }
