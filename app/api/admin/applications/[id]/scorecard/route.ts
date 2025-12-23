@@ -137,14 +137,14 @@ export async function GET(
     const requestedSystem = url.searchParams.get("system");
     
     // Check if user is privileged (can view multiple systems)
-    const isPrivileged = user?.role === UserRole.ADMIN || 
-                         user?.role === UserRole.TEAM_CAPTAIN_OB;
+    const isHighPrivileged = user?.role === UserRole.ADMIN || 
+                              user?.role === UserRole.TEAM_CAPTAIN_OB;
     
     // Determine which system to use
     let targetSystem: string | undefined = requestedSystem || undefined;
     if (!targetSystem) {
       // For non-privileged users (reviewers, system leads), default to their own system
-      if (!isPrivileged && user?.memberProfile?.system) {
+      if (!isHighPrivileged && user?.memberProfile?.system) {
         targetSystem = user.memberProfile.system;
       } else {
         // For admins/team captains, default to first preferred system of applicant
@@ -171,7 +171,13 @@ export async function GET(
     // Also include all team systems (for dropdown purposes)
     const allTeamSystems = TEAM_SYSTEMS[application.team as Team]?.map(s => s.value) || [];
     
-    // isPrivileged already defined above
+    // Determine if user can see individual submissions for the current system
+    // Admins/Captains can see all, System Leads can see their own system's submissions
+    const isSystemLead = user?.role === UserRole.SYSTEM_LEAD;
+    const userSystem = user?.memberProfile?.system;
+    const canSeeSubmissions = isHighPrivileged || 
+                               (isSystemLead && userSystem && targetSystem === userSystem);
+    
     // Fetch ALL submissions for this application/system (for aggregates)
     const allSubmissionsQuery = targetSystem
       ? adminDb
@@ -201,21 +207,22 @@ export async function GET(
     // Calculate aggregates
     const aggregates = config ? calculateAggregates(allSubmissions, config) : null;
 
-    // For privileged users, include all individual submissions (without current user's for display purposes)
-    const otherSubmissions = isPrivileged 
+    // For users who can see submissions, include all individual submissions (without current user's for display purposes)
+    const otherSubmissions = canSeeSubmissions 
       ? allSubmissions.filter(s => s.reviewerId !== userId)
       : [];
 
     return NextResponse.json({ 
       config, 
       submission: mySubmission,
-      allSubmissions: isPrivileged ? allSubmissions : [],
+      allSubmissions: canSeeSubmissions ? allSubmissions : [],
       otherSubmissions,
       aggregates,
       currentSystem: targetSystem,
       systemsWithConfigs,
       allTeamSystems,
-      isPrivileged
+      isPrivileged: isHighPrivileged,
+      canSeeSubmissions
     });
 
   } catch (error) {

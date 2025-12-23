@@ -198,7 +198,7 @@ export default function ApplicationScorecard({
         )}
 
         {/* Individual Reviewer Submissions */}
-        {isPrivilegedUser && allSubmissions.length > 0 && (
+        {allSubmissions.length > 0 && (
             <div className="p-4 rounded-lg bg-neutral-900/50 border border-white/5">
                 <h3 className="text-white font-bold mb-4">Individual Submissions</h3>
                 <div className="space-y-3">
