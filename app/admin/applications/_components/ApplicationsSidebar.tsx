@@ -4,12 +4,31 @@ import { useState } from "react";
 import { useApplications } from "./ApplicationsContext";
 import { ApplicationStatus } from "@/lib/models/Application";
 import { Team, UserRole } from "@/lib/models/User";
+import { RecruitingStep } from "@/lib/models/Config";
 import { TEAM_SYSTEMS } from "@/lib/models/teamQuestions";
 import { format } from "date-fns";
-import { Search, ArrowUpDown, Star } from "lucide-react";
+import { Search, ArrowUpDown, Star, MessageSquare } from "lucide-react";
 import clsx from "clsx";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+
+// Helper to check if recruiting step is at or past a certain stage
+const RECRUITING_STEP_ORDER: RecruitingStep[] = [
+  RecruitingStep.OPEN,
+  RecruitingStep.REVIEWING,
+  RecruitingStep.RELEASE_INTERVIEWS,
+  RecruitingStep.INTERVIEWING,
+  RecruitingStep.RELEASE_TRIAL,
+  RecruitingStep.TRIAL_WORKDAY,
+  RecruitingStep.RELEASE_DECISIONS,
+];
+
+function isRecruitingStepAtOrPast(currentStep: RecruitingStep | null, targetStep: RecruitingStep): boolean {
+  if (!currentStep) return false;
+  const currentIndex = RECRUITING_STEP_ORDER.indexOf(currentStep);
+  const targetIndex = RECRUITING_STEP_ORDER.indexOf(targetStep);
+  return currentIndex >= targetIndex;
+}
 
 // Status Badge Component
 function StatusBadge({ status }: { status: ApplicationStatus }) {
@@ -87,18 +106,21 @@ function getDisplayStatusForUser(
 }
 
 export default function ApplicationsSidebar() {
-  const { applications, loading, currentUser } = useApplications();
+  const { applications, loading, currentUser, recruitingStep } = useApplications();
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilters, setStatusFilters] = useState<ApplicationStatus[]>([]);
   const [systemFilters, setSystemFilters] = useState<string[]>([]);
   const [teamFilters, setTeamFilters] = useState<string[]>([]);
   const [showOnlyUnreviewedByMySystem, setShowOnlyUnreviewedByMySystem] = useState(false);
-  const [sortBy, setSortBy] = useState<"date" | "name" | "rating">("date");
+  const [sortBy, setSortBy] = useState<"date" | "name" | "rating" | "interviewRating">("date");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   const pathname = usePathname();
   
   // Check if user can see ratings (System Lead or Reviewer only)
   const canSeeRatings = currentUser?.role === UserRole.SYSTEM_LEAD || currentUser?.role === UserRole.REVIEWER;
+  
+  // Check if interview ratings should be shown (at RELEASE_INTERVIEWS or later)
+  const showInterviewRatings = canSeeRatings && isRecruitingStepAtOrPast(recruitingStep, RecruitingStep.RELEASE_INTERVIEWS);
 
   // Extract selected ID from pathname
   // Expected path: /admin/applications/[id]
@@ -135,6 +157,12 @@ export default function ApplicationsSidebar() {
         const ratingA = a.aggregateRating ?? -1;
         const ratingB = b.aggregateRating ?? -1;
         comparison = ratingA - ratingB;
+        break;
+      case "interviewRating":
+        // Null ratings should go to the end
+        const intRatingA = a.interviewAggregateRating ?? -1;
+        const intRatingB = b.interviewAggregateRating ?? -1;
+        comparison = intRatingA - intRatingB;
         break;
       case "date":
       default:
@@ -318,7 +346,19 @@ export default function ApplicationsSidebar() {
                       : 'bg-neutral-800 border-white/10 text-neutral-400 hover:border-white/20'
                   }`}
                 >
-                  <Star className="h-3 w-3" />Rating {sortBy === "rating" && (sortDirection === "asc" ? "↑" : "↓")}
+                  <Star className="h-3 w-3" />Review {sortBy === "rating" && (sortDirection === "asc" ? "↑" : "↓")}
+                </button>
+              )}
+              {showInterviewRatings && (
+                <button
+                  onClick={() => { setSortBy("interviewRating"); setSortDirection(prev => sortBy === "interviewRating" ? (prev === "asc" ? "desc" : "asc") : "desc"); }}
+                  className={`px-2 py-1 text-xs rounded-md border transition-colors flex items-center gap-1 ${
+                    sortBy === "interviewRating"
+                      ? 'bg-blue-500/20 border-blue-500/50 text-blue-400'
+                      : 'bg-neutral-800 border-white/10 text-neutral-400 hover:border-white/20'
+                  }`}
+                >
+                  <MessageSquare className="h-3 w-3" />Interview {sortBy === "interviewRating" && (sortDirection === "asc" ? "↑" : "↓")}
                 </button>
               )}
             </div>
@@ -359,6 +399,17 @@ export default function ApplicationsSidebar() {
                   )}>
                     <Star className="h-3 w-3" />
                     {app.aggregateRating.toFixed(1)}
+                  </span>
+                )}
+                {showInterviewRatings && app.interviewAggregateRating !== null && app.interviewAggregateRating !== undefined && (
+                  <span className={clsx(
+                    "px-2 py-0.5 text-xs font-medium rounded-full border flex items-center gap-1",
+                    app.interviewAggregateRating >= 4 ? "bg-green-500/10 text-green-400 border-green-500/20" :
+                    app.interviewAggregateRating >= 3 ? "bg-blue-500/10 text-blue-400 border-blue-500/20" :
+                    "bg-red-500/10 text-red-400 border-red-500/20"
+                  )}>
+                    <MessageSquare className="h-3 w-3" />
+                    {app.interviewAggregateRating.toFixed(1)}
                   </span>
                 )}
               </div>

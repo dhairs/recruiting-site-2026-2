@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
-import { ScorecardConfig, ScorecardFieldConfig, ScorecardFieldType } from "@/lib/models/Scorecard";
+import { ScorecardConfig, ScorecardFieldConfig, ScorecardFieldType, ScorecardType } from "@/lib/models/Scorecard";
 import { Team } from "@/lib/models/User";
 import { TEAM_SYSTEMS } from "@/lib/models/teamQuestions";
 import { 
@@ -14,7 +14,9 @@ import {
   ChevronDown,
   ChevronUp,
   GripVertical,
-  Settings2
+  Settings2,
+  ClipboardList,
+  MessagesSquare
 } from "lucide-react";
 import clsx from "clsx";
 
@@ -34,6 +36,9 @@ export function ScorecardsTab() {
   const [loading, setLoading] = useState(true);
   const [expandedConfig, setExpandedConfig] = useState<string | null>(null);
   
+  // Scorecard type toggle (application vs interview)
+  const [selectedType, setSelectedType] = useState<ScorecardType>("application");
+  
   // Create new config state
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newConfigTeam, setNewConfigTeam] = useState<Team>(Team.ELECTRIC);
@@ -47,7 +52,7 @@ export function ScorecardsTab() {
 
   useEffect(() => {
     fetchConfigs();
-  }, []);
+  }, [selectedType]);
 
   useEffect(() => {
     // Reset system when team changes
@@ -58,8 +63,9 @@ export function ScorecardsTab() {
   }, [newConfigTeam]);
 
   const fetchConfigs = async () => {
+    setLoading(true);
     try {
-      const res = await fetch("/api/admin/scorecards");
+      const res = await fetch(`/api/admin/scorecards?type=${selectedType}`);
       if (res.ok) {
         const data = await res.json();
         setConfigs(data.configs || []);
@@ -86,6 +92,7 @@ export function ScorecardsTab() {
         body: JSON.stringify({
           team: newConfigTeam,
           system: newConfigSystem,
+          scorecardType: selectedType,
           fields: [],
         }),
       });
@@ -95,7 +102,7 @@ export function ScorecardsTab() {
         setConfigs(prev => [...prev, data.config]);
         setShowCreateModal(false);
         setExpandedConfig(data.config.id);
-        toast.success("Scorecard configuration created!");
+        toast.success(`${selectedType === "interview" ? "Interview scorecard" : "Scorecard"} configuration created!`);
       } else {
         const error = await res.json();
         toast.error(error.error || "Failed to create configuration");
@@ -240,14 +247,53 @@ export function ScorecardsTab() {
 
   return (
     <div>
+      {/* Type Toggle Tabs */}
+      <div className="flex items-center gap-2 mb-6 border-b border-white/5 pb-4">
+        <button
+          onClick={() => setSelectedType("application")}
+          className={clsx(
+            "flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors",
+            selectedType === "application"
+              ? "bg-orange-600 text-white"
+              : "bg-neutral-800 text-neutral-400 hover:text-white"
+          )}
+        >
+          <ClipboardList className="h-4 w-4" />
+          Application Scorecards
+        </button>
+        <button
+          onClick={() => setSelectedType("interview")}
+          className={clsx(
+            "flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors",
+            selectedType === "interview"
+              ? "bg-blue-600 text-white"
+              : "bg-neutral-800 text-neutral-400 hover:text-white"
+          )}
+        >
+          <MessagesSquare className="h-4 w-4" />
+          Interview Scorecards
+        </button>
+      </div>
+
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h2 className="text-2xl font-bold text-white mb-2">Scorecard Configurations</h2>
-          <p className="text-neutral-400">Define evaluation criteria for each team and system.</p>
+          <h2 className="text-2xl font-bold text-white mb-2">
+            {selectedType === "interview" ? "Interview Scorecard" : "Application Scorecard"} Configurations
+          </h2>
+          <p className="text-neutral-400">
+            {selectedType === "interview" 
+              ? "Define evaluation criteria for interviews."
+              : "Define evaluation criteria for application reviews."}
+          </p>
         </div>
         <button
           onClick={() => setShowCreateModal(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg font-medium hover:bg-orange-500 transition-colors"
+          className={clsx(
+            "flex items-center gap-2 px-4 py-2 text-white rounded-lg font-medium transition-colors",
+            selectedType === "interview" 
+              ? "bg-blue-600 hover:bg-blue-500"
+              : "bg-orange-600 hover:bg-orange-500"
+          )}
         >
           <Plus className="h-4 w-4" />
           New Configuration
@@ -411,7 +457,9 @@ export function ScorecardsTab() {
       {showCreateModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="bg-neutral-900 border border-white/10 rounded-2xl p-6 max-w-md w-full mx-4 shadow-2xl">
-            <h3 className="text-xl font-bold text-white mb-6">New Scorecard Configuration</h3>
+            <h3 className="text-xl font-bold text-white mb-6">
+              New {selectedType === "interview" ? "Interview " : ""}Scorecard Configuration
+            </h3>
             
             <div className="space-y-4 mb-6">
               <div>
@@ -439,6 +487,14 @@ export function ScorecardsTab() {
                   ))}
                 </select>
               </div>
+              
+              {selectedType === "interview" && (
+                <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+                  <p className="text-xs text-blue-300">
+                    Interview scorecards are only visible after interview invites have been released.
+                  </p>
+                </div>
+              )}
             </div>
             
             <div className="flex gap-3">
@@ -451,7 +507,12 @@ export function ScorecardsTab() {
               <button
                 disabled={creating}
                 onClick={handleCreateConfig}
-                className="flex-1 py-2 rounded-lg bg-orange-600 text-white font-medium hover:bg-orange-500 transition-colors disabled:opacity-50"
+                className={clsx(
+                  "flex-1 py-2 rounded-lg text-white font-medium transition-colors disabled:opacity-50",
+                  selectedType === "interview"
+                    ? "bg-blue-600 hover:bg-blue-500"
+                    : "bg-orange-600 hover:bg-orange-500"
+                )}
               >
                 {creating ? "Creating..." : "Create"}
               </button>

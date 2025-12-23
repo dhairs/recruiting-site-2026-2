@@ -24,6 +24,25 @@ import { Note, ReviewTask } from "@/lib/models/ApplicationExtras";
 import { RecruitingStep } from "@/lib/models/Config";
 import { useApplications } from "./ApplicationsContext";
 import ApplicationScorecard from "./ApplicationScorecard";
+import InterviewScorecard from "./InterviewScorecard";
+
+// Helper to check if recruiting step is at or past a certain stage
+const RECRUITING_STEP_ORDER: RecruitingStep[] = [
+  RecruitingStep.OPEN,
+  RecruitingStep.REVIEWING,
+  RecruitingStep.RELEASE_INTERVIEWS,
+  RecruitingStep.INTERVIEWING,
+  RecruitingStep.RELEASE_TRIAL,
+  RecruitingStep.TRIAL_WORKDAY,
+  RecruitingStep.RELEASE_DECISIONS,
+];
+
+function isRecruitingStepAtOrPast(currentStep: RecruitingStep | null, targetStep: RecruitingStep): boolean {
+  if (!currentStep) return false;
+  const currentIndex = RECRUITING_STEP_ORDER.indexOf(currentStep);
+  const targetIndex = RECRUITING_STEP_ORDER.indexOf(targetStep);
+  return currentIndex >= targetIndex;
+}
 
 type Tab = "application" | "resume" | "scorecard";
 
@@ -540,11 +559,36 @@ export default function ApplicationDetail({ applicationId }: ApplicationDetailPr
                   </div>
 
                 {activeTab === "scorecard" && (
-                    <ApplicationScorecard 
-                        applicationId={applicationId}
-                        currentUserSystem={currentUser?.memberProfile?.system}
-                        isPrivilegedUser={currentUser?.role === UserRole.ADMIN || currentUser?.role === UserRole.TEAM_CAPTAIN_OB}
-                    />
+                    <div className="space-y-8">
+                    {/* Interview Scorecard - only visible at RELEASE_INTERVIEWS or later */}
+                        {isRecruitingStepAtOrPast(recruitingStep, RecruitingStep.RELEASE_INTERVIEWS) && (
+                            <div className="border-t border-white/10 pt-8">
+                                <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                                    <span className="text-blue-500">💬</span>
+                                    Interview Scorecard
+                                </h3>
+                                <InterviewScorecard 
+                                    applicationId={applicationId}
+                                    currentUserSystem={currentUser?.memberProfile?.system}
+                                    isPrivilegedUser={currentUser?.role === UserRole.ADMIN || currentUser?.role === UserRole.TEAM_CAPTAIN_OB}
+                                />
+                            </div>
+                        )}
+                        {/* Application Scorecard - always visible */}
+                        <div>
+                            <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                                <span className="text-orange-500">📋</span>
+                                Application Review Scorecard
+                            </h3>
+                            <ApplicationScorecard 
+                                applicationId={applicationId}
+                                currentUserSystem={currentUser?.memberProfile?.system}
+                                isPrivilegedUser={currentUser?.role === UserRole.ADMIN || currentUser?.role === UserRole.TEAM_CAPTAIN_OB}
+                            />
+                        </div>
+                        
+                        
+                    </div>
                 )}
               </div>
             </div>

@@ -1,5 +1,5 @@
 import { adminDb } from "./admin";
-import { ScorecardConfig, ScorecardFieldConfig } from "@/lib/models/Scorecard";
+import { ScorecardConfig, ScorecardFieldConfig, ScorecardType } from "@/lib/models/Scorecard";
 import { Team, User, UserRole } from "@/lib/models/User";
 
 const CONFIG_COLLECTION = "scorecardConfigs";
@@ -7,10 +7,12 @@ const USERS_COLLECTION = "users";
 
 /**
  * Generate a deterministic document ID for a scorecard config.
- * Format: {team}-{system} (all lowercase, spaces replaced with hyphens)
+ * Format: {team}-{system}-{type} (all lowercase, spaces replaced with hyphens)
+ * For backward compatibility, "application" type omits the suffix.
  */
-export function generateScorecardConfigId(team: Team, system: string): string {
-  return `${team}-${system}`.toLowerCase().replace(/\s+/g, '-');
+export function generateScorecardConfigId(team: Team, system: string, type: ScorecardType = "application"): string {
+  const base = `${team}-${system}`.toLowerCase().replace(/\s+/g, '-');
+  return type === "interview" ? `${base}-interview` : base;
 }
 
 /**
@@ -23,6 +25,7 @@ const toConfig = (doc: FirebaseFirestore.DocumentSnapshot): ScorecardConfig | nu
     id: doc.id,
     team: data?.team,
     system: data?.system,
+    scorecardType: data?.scorecardType || "application",
     fields: data?.fields || [],
     createdAt: data?.createdAt?.toDate(),
     updatedAt: data?.updatedAt?.toDate(),
@@ -31,24 +34,50 @@ const toConfig = (doc: FirebaseFirestore.DocumentSnapshot): ScorecardConfig | nu
 };
 
 /**
- * Fetch all scorecard configs, optionally filtered by team.
+ * Fetch all scorecard configs, optionally filtered by team and type.
  */
-export async function getScorecardConfigs(team?: Team): Promise<ScorecardConfig[]> {
+export async function getScorecardConfigs(team?: Team, type: ScorecardType = "application"): Promise<ScorecardConfig[]> {
   let query: FirebaseFirestore.Query = adminDb.collection(CONFIG_COLLECTION);
   
   if (team) {
     query = query.where("team", "==", team);
   }
   
+  // Filter by type - for backward compatibility, configs without type are "application"
+  query = query.where("scorecardType", "==", type);
+  
   const snapshot = await query.get();
+  
+  // Also include legacy configs without scorecardType for application type
+  if (type === "application") {
+    const legacyQuery = team 
+      ? adminDb.collection(CONFIG_COLLECTION).where("team", "==", team)
+      : adminDb.collection(CONFIG_COLLECTION);
+    const legacySnapshot = await legacyQuery.get();
+    const legacyConfigs = legacySnapshot.docs
+      .map(toConfig)
+      .filter((c): c is ScorecardConfig => c !== null && !c.scorecardType);
+    
+    const typedConfigs = snapshot.docs.map(toConfig).filter((c): c is ScorecardConfig => c !== null);
+    
+    // Merge and deduplicate by id
+    const allConfigs = [...typedConfigs, ...legacyConfigs];
+    const seen = new Set<string>();
+    return allConfigs.filter(c => {
+      if (c.id && seen.has(c.id)) return false;
+      if (c.id) seen.add(c.id);
+      return true;
+    });
+  }
+  
   return snapshot.docs.map(toConfig).filter((c): c is ScorecardConfig => c !== null);
 }
 
 /**
- * Fetch a specific scorecard config by team and system.
+ * Fetch a specific scorecard config by team, system, and type.
  */
-export async function getScorecardConfig(team: Team, system: string): Promise<ScorecardConfig | null> {
-  const docId = generateScorecardConfigId(team, system);
+export async function getScorecardConfig(team: Team, system: string, type: ScorecardType = "application"): Promise<ScorecardConfig | null> {
+  const docId = generateScorecardConfigId(team, system, type);
   const doc = await adminDb.collection(CONFIG_COLLECTION).doc(docId).get();
   return toConfig(doc);
 }
@@ -67,17 +96,29 @@ export async function getScorecardConfigById(id: string): Promise<ScorecardConfi
  * - Team Captain/OB: sees all configs for their team
  * - System Lead: sees only their system's config
  * - Reviewer: sees only their system's config
+ * 
+ * @param type - Filter by scorecard type ("application" or "interview")
  */
-export async function getScorecardConfigsForUser(userUid: string): Promise<ScorecardConfig[]> {
+export async function getScorecardConfigsForUser(userUid: string, type?: ScorecardType): Promise<ScorecardConfig[]> {
   const userDoc = await adminDb.collection(USERS_COLLECTION).doc(userUid).get();
   if (!userDoc.exists) return [];
 
   const user = userDoc.data() as User;
+  
+  // Helper to filter configs by type
+  const filterByType = (configs: ScorecardConfig[]): ScorecardConfig[] => {
+    if (!type) return configs;
+    return configs.filter(c => {
+      const configType = c.scorecardType || "application";
+      return configType === type;
+    });
+  };
 
   // Admin sees everything
   if (user.role === UserRole.ADMIN) {
     const snapshot = await adminDb.collection(CONFIG_COLLECTION).get();
-    return snapshot.docs.map(toConfig).filter((c): c is ScorecardConfig => c !== null);
+    const all = snapshot.docs.map(toConfig).filter((c): c is ScorecardConfig => c !== null);
+    return filterByType(all);
   }
 
   // Team Captain sees everything for their team
@@ -86,7 +127,8 @@ export async function getScorecardConfigsForUser(userUid: string): Promise<Score
       .collection(CONFIG_COLLECTION)
       .where("team", "==", user.memberProfile.team)
       .get();
-    return snapshot.docs.map(toConfig).filter((c): c is ScorecardConfig => c !== null);
+    const all = snapshot.docs.map(toConfig).filter((c): c is ScorecardConfig => c !== null);
+    return filterByType(all);
   }
 
   // System Lead and Reviewer see only their system
@@ -97,7 +139,8 @@ export async function getScorecardConfigsForUser(userUid: string): Promise<Score
       .where("team", "==", user.memberProfile.team)
       .where("system", "==", user.memberProfile.system)
       .get();
-    return snapshot.docs.map(toConfig).filter((c): c is ScorecardConfig => c !== null);
+    const all = snapshot.docs.map(toConfig).filter((c): c is ScorecardConfig => c !== null);
+    return filterByType(all);
   }
 
   return [];
@@ -147,20 +190,23 @@ export async function createScorecardConfig(
     throw new Error("Team and system are required for scorecard configs");
   }
 
-  const docId = generateScorecardConfigId(config.team, config.system);
+  const configType: ScorecardType = config.scorecardType || "application";
+  const docId = generateScorecardConfigId(config.team, config.system, configType);
   const docRef = adminDb.collection(CONFIG_COLLECTION).doc(docId);
 
   return await adminDb.runTransaction(async (transaction) => {
     const existing = await transaction.get(docRef);
     
     if (existing.exists) {
-      throw new Error(`Scorecard config for ${config.team} - ${config.system} already exists`);
+      const typeLabel = configType === "interview" ? "Interview scorecard" : "Scorecard";
+      throw new Error(`${typeLabel} config for ${config.team} - ${config.system} already exists`);
     }
 
     const now = new Date();
     const newConfig: ScorecardConfig = {
       ...config,
       id: docId,
+      scorecardType: configType,
       createdAt: now,
       updatedAt: now,
       createdBy: creatorUid,

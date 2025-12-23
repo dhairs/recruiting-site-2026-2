@@ -10,11 +10,30 @@ import { getUser } from "@/lib/firebase/users";
 import { getScorecardConfig } from "@/lib/firebase/scorecards";
 import { ScorecardSubmission, ScorecardConfig } from "@/lib/models/Scorecard";
 import { UserRole, Team } from "@/lib/models/User";
+import { RecruitingStep } from "@/lib/models/Config";
 import pino from "pino";
 
 const logger = pino();
 
 import { calculateOverallRating } from "@/lib/scorecards/aggregates";
+
+// Helper to check if recruiting step is at or past a certain stage
+const RECRUITING_STEP_ORDER: RecruitingStep[] = [
+  RecruitingStep.OPEN,
+  RecruitingStep.REVIEWING,
+  RecruitingStep.RELEASE_INTERVIEWS,
+  RecruitingStep.INTERVIEWING,
+  RecruitingStep.RELEASE_TRIAL,
+  RecruitingStep.TRIAL_WORKDAY,
+  RecruitingStep.RELEASE_DECISIONS,
+];
+
+function isRecruitingStepAtOrPast(currentStep: RecruitingStep | null, targetStep: RecruitingStep): boolean {
+  if (!currentStep) return false;
+  const currentIndex = RECRUITING_STEP_ORDER.indexOf(currentStep);
+  const targetIndex = RECRUITING_STEP_ORDER.indexOf(targetStep);
+  return currentIndex >= targetIndex;
+}
 
 
 export async function GET(request: NextRequest) {
@@ -79,31 +98,41 @@ export async function GET(request: NextRequest) {
     // For System Leads and Reviewers, compute aggregate ratings
     // Use a batch approach: fetch all scorecards for the system once, then compute per-app
     let ratingsMap = new Map<string, number | null>();
+    let interviewRatingsMap = new Map<string, number | null>();
     
     if ((user.role === UserRole.SYSTEM_LEAD || user.role === UserRole.REVIEWER) && 
         user.memberProfile?.team && user.memberProfile?.system) {
       const userTeam = user.memberProfile.team as Team;
       const userSystem = user.memberProfile.system;
       
-      // Get scorecard config for this system
+      // Get scorecard config for this system (application scorecards)
       const config = await getScorecardConfig(userTeam, userSystem);
       
-      if (config) {
+      // Get interview scorecard config for this system
+      const interviewConfig = await getScorecardConfig(userTeam, userSystem, "interview");
+      
+      // Get current recruiting step to determine if interview scorecards should be shown
+      const recruitingConfigDoc = await adminDb.collection("config").doc("recruiting").get();
+      const currentStep = recruitingConfigDoc.exists 
+        ? (recruitingConfigDoc.data()?.currentStep as RecruitingStep | null)
+        : null;
+      const showInterviewRatings = isRecruitingStepAtOrPast(currentStep, RecruitingStep.RELEASE_INTERVIEWS);
+      
+      if (config || (interviewConfig && showInterviewRatings)) {
         // Fetch all scorecard submissions for this system across all applications
-        // Use a collection group query if available, or batch the queries
         const applicationIds = applications.map(app => app.id);
         
         // Batch fetch scorecards for all applications in this system
-        // We'll query each application's scorecards subcollection
         const scorecardPromises = applicationIds.map(async (appId) => {
-          const snapshot = await adminDb
+          // Application scorecards
+          const appSnapshot = await adminDb
             .collection("applications")
             .doc(appId)
             .collection("scorecards")
             .where("system", "==", userSystem)
             .get();
           
-          const submissions: ScorecardSubmission[] = snapshot.docs.map(doc => {
+          const appSubmissions: ScorecardSubmission[] = appSnapshot.docs.map(doc => {
             const data = doc.data();
             return {
               ...data,
@@ -113,15 +142,43 @@ export async function GET(request: NextRequest) {
             } as ScorecardSubmission;
           });
           
-          return { appId, submissions };
+          // Interview scorecards (only if at RELEASE_INTERVIEWS or later)
+          let interviewSubmissions: ScorecardSubmission[] = [];
+          if (showInterviewRatings) {
+            const intSnapshot = await adminDb
+              .collection("applications")
+              .doc(appId)
+              .collection("interviewScorecards")
+              .where("system", "==", userSystem)
+              .get();
+            
+            interviewSubmissions = intSnapshot.docs.map(doc => {
+              const data = doc.data();
+              return {
+                ...data,
+                id: doc.id,
+                scorecardType: "interview",
+                submittedAt: data.submittedAt?.toDate?.() || data.submittedAt,
+                updatedAt: data.updatedAt?.toDate?.() || data.updatedAt,
+              } as ScorecardSubmission;
+            });
+          }
+          
+          return { appId, appSubmissions, interviewSubmissions };
         });
         
         const scorecardResults = await Promise.all(scorecardPromises);
         
         // Compute aggregate rating for each application
-        for (const { appId, submissions } of scorecardResults) {
-          const rating = calculateOverallRating(submissions, config);
-          ratingsMap.set(appId, rating);
+        for (const { appId, appSubmissions, interviewSubmissions } of scorecardResults) {
+          if (config) {
+            const rating = calculateOverallRating(appSubmissions, config);
+            ratingsMap.set(appId, rating);
+          }
+          if (interviewConfig && showInterviewRatings) {
+            const interviewRating = calculateOverallRating(interviewSubmissions, interviewConfig);
+            interviewRatingsMap.set(appId, interviewRating);
+          }
         }
       }
     }
@@ -130,6 +187,7 @@ export async function GET(request: NextRequest) {
       ...app,
       user: userMap.get(app.userId) || { name: "Unknown", email: "", role: "applicant" },
       aggregateRating: ratingsMap.get(app.id) ?? null,
+      interviewAggregateRating: interviewRatingsMap.get(app.id) ?? null,
     }));
 
     return NextResponse.json({ applications: enrichedApplications }, { status: 200 });

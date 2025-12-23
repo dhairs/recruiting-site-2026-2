@@ -6,6 +6,7 @@ import {
   canUserModifyConfig 
 } from "@/lib/firebase/scorecards";
 import { Team } from "@/lib/models/User";
+import { ScorecardType } from "@/lib/models/Scorecard";
 import pino from "pino";
 
 const logger = pino();
@@ -13,11 +14,18 @@ const logger = pino();
 /**
  * GET /api/admin/scorecards
  * List all scorecard configs the user is authorized to see.
+ * Query params:
+ *   - type: Optional, filter by scorecard type ("application" or "interview")
  */
 export async function GET(request: NextRequest) {
   try {
     const { uid } = await requireStaff();
-    const configs = await getScorecardConfigsForUser(uid);
+    
+    // Parse type from query params
+    const url = new URL(request.url);
+    const typeParam = url.searchParams.get("type") as ScorecardType | null;
+    
+    const configs = await getScorecardConfigsForUser(uid, typeParam || undefined);
     return NextResponse.json({ configs }, { status: 200 });
   } catch (error) {
     logger.error(error, "Failed to fetch scorecard configs");
@@ -31,13 +39,18 @@ export async function GET(request: NextRequest) {
 /**
  * POST /api/admin/scorecards
  * Create a new scorecard configuration.
+ * Body:
+ *   - team: Team name (required)
+ *   - system: System name (required)
+ *   - fields: Array of field configs (optional)
+ *   - scorecardType: "application" or "interview" (optional, defaults to "application")
  */
 export async function POST(request: NextRequest) {
   try {
     const { uid } = await requireStaff();
     
     const body = await request.json();
-    const { team, system, fields } = body;
+    const { team, system, fields, scorecardType } = body;
 
     if (!team || !system) {
       return NextResponse.json({ error: "Team and system are required" }, { status: 400 });
@@ -45,6 +58,12 @@ export async function POST(request: NextRequest) {
 
     if (!Object.values(Team).includes(team)) {
       return NextResponse.json({ error: "Invalid team" }, { status: 400 });
+    }
+    
+    // Validate scorecardType if provided
+    const validTypes: ScorecardType[] = ["application", "interview"];
+    if (scorecardType && !validTypes.includes(scorecardType)) {
+      return NextResponse.json({ error: "Invalid scorecard type" }, { status: 400 });
     }
 
     // Check if user can create config for this team/system
@@ -56,6 +75,7 @@ export async function POST(request: NextRequest) {
     const config = await createScorecardConfig({
       team,
       system,
+      scorecardType: scorecardType || "application",
       fields: fields || [],
     }, uid);
 
