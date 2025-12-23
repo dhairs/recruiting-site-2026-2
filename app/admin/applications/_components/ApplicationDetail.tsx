@@ -177,15 +177,6 @@ export default function ApplicationDetail({ applicationId }: ApplicationDetailPr
       return;
     }
     
-    if (currentUser?.role === UserRole.REVIEWER) {
-      if (isTrialMode) {
-        handleStatusUpdate(ApplicationStatus.TRIAL);
-      } else {
-        handleStatusUpdate(ApplicationStatus.INTERVIEW);
-      }
-      return;
-    }
-    
     if (isTrialMode) {
       const existingOfferSystems = selectedApp.trialOffers?.map(o => o.system) || [];
       setSelectedTrialSystems(existingOfferSystems);
@@ -610,22 +601,25 @@ export default function ApplicationDetail({ applicationId }: ApplicationDetailPr
                      <span>{getStatusLabel(selectedApp.status)}</span>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
-                    <button 
-                      disabled={statusLoading}
-                      onClick={handleRejectClick}
-                      className="flex items-center justify-center gap-2 py-2 rounded-lg bg-neutral-800 text-white text-sm font-medium hover:bg-neutral-700 transition-colors border border-white/5 disabled:opacity-50"
-                    >
-                      <XCircle className="h-4 w-4" /> Reject
-                    </button>
-                    <button
-                      disabled={statusLoading}
-                      onClick={handleAdvanceClick}
-                      className="flex items-center justify-center gap-2 py-2 rounded-lg bg-orange-600 text-white text-sm font-medium hover:bg-orange-500 transition-colors shadow-lg shadow-orange-900/20 disabled:opacity-50"
-                    >
-                      <CheckCircle className="h-4 w-4" /> Advance
-                    </button>
-                  </div>
+                  {/* Only show Advance/Reject buttons for non-reviewers */}
+                  {currentUser?.role !== UserRole.REVIEWER && (
+                    <div className="grid grid-cols-2 gap-3">
+                      <button 
+                        disabled={statusLoading}
+                        onClick={handleRejectClick}
+                        className="flex items-center justify-center gap-2 py-2 rounded-lg bg-neutral-800 text-white text-sm font-medium hover:bg-neutral-700 transition-colors border border-white/5 disabled:opacity-50"
+                      >
+                        <XCircle className="h-4 w-4" /> Reject
+                      </button>
+                      <button
+                        disabled={statusLoading}
+                        onClick={handleAdvanceClick}
+                        className="flex items-center justify-center gap-2 py-2 rounded-lg bg-orange-600 text-white text-sm font-medium hover:bg-orange-500 transition-colors shadow-lg shadow-orange-900/20 disabled:opacity-50"
+                      >
+                        <CheckCircle className="h-4 w-4" /> Advance
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 <div className="h-px bg-white/5" />
