@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import toast from "react-hot-toast";
 import { format } from "date-fns";
 import { 
@@ -80,6 +81,14 @@ export default function ApplicationDetail({ applicationId }: ApplicationDetailPr
   const [selectedInterviewOffer, setSelectedInterviewOffer] = useState<InterviewOffer | null>(null);
   const [interviewStatusUpdating, setInterviewStatusUpdating] = useState(false);
 
+  // Related applications state (other teams this user applied to)
+  const [relatedApps, setRelatedApps] = useState<Array<{
+    id?: string;
+    team: string;
+    status: string;
+    preferredSystems: string[];
+  }>>([]);
+
   // Fetch extras when app changes
   useEffect(() => {
     if (!applicationId) return;
@@ -91,6 +100,12 @@ export default function ApplicationDetail({ applicationId }: ApplicationDetailPr
     fetch(`/api/admin/applications/${applicationId}/tasks`)
       .then(res => res.json())
       .then(data => setTasks(data.tasks || []));
+
+    // Fetch related applications (other teams this user applied to)
+    fetch(`/api/admin/applications/${applicationId}/related`)
+      .then(res => res.json())
+      .then(data => setRelatedApps(data.applications || []))
+      .catch(() => setRelatedApps([]));
   }, [applicationId]);
 
   if (loading) {
@@ -385,7 +400,7 @@ export default function ApplicationDetail({ applicationId }: ApplicationDetailPr
                         <div className="text-neutral-400 text-sm mb-4">
                            {selectedApp.formData.major || "Major not specified"} • Class of {selectedApp.formData.graduationYear || "N/A"}
                         </div>
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 flex-wrap">
                           <span className="px-2 py-1 rounded bg-orange-500/10 text-orange-400 text-xs font-medium border border-orange-500/20">
                             {selectedApp.team} Team
                           </span>
@@ -395,6 +410,43 @@ export default function ApplicationDetail({ applicationId }: ApplicationDetailPr
                              </span>
                            ))}
                         </div>
+
+                        {/* Also Applied To - inline in header */}
+                        {relatedApps.length > 0 && (
+                          <div className="flex items-center gap-2 flex-wrap mt-3">
+                            <span className="text-xs text-neutral-500">Also applied to:</span>
+                            {relatedApps.map((app, idx) => {
+                              const isAdmin = currentUser?.role === UserRole.ADMIN;
+                              const statusColor = app.status === 'rejected' 
+                                ? 'text-red-400' 
+                                : app.status === 'accepted' 
+                                  ? 'text-green-400' 
+                                  : 'text-neutral-300';
+                              
+                              const badge = (
+                                <span 
+                                  className={clsx(
+                                    "px-2 py-1 rounded text-xs font-medium border",
+                                    "bg-purple-500/10 text-purple-400 border-purple-500/20",
+                                    isAdmin && app.id && "cursor-pointer hover:bg-purple-500/20 transition-colors"
+                                  )}
+                                >
+                                  {app.team} <span className={statusColor}>({getStatusLabel(app.status)})</span>
+                                </span>
+                              );
+                              
+                              if (isAdmin && app.id) {
+                                return (
+                                  <Link key={app.id} href={`/admin/applications/${app.id}`}>
+                                    {badge}
+                                  </Link>
+                                );
+                              }
+                              
+                              return <span key={idx}>{badge}</span>;
+                            })}
+                          </div>
+                        )}
                       </div>
                     </div>
                     <div className="flex items-center gap-4">
