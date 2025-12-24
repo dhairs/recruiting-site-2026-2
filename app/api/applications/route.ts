@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminAuth } from "@/lib/firebase/admin";
+import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import {
   createApplication,
   getUserApplications,
@@ -107,8 +107,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Fetch user profile to get name/email for denormalization
+    const userDoc = await adminDb.collection("users").doc(uid).get();
+    const userData = userDoc.data();
+
     const application = await createApplication({
       userId: uid,
+      userName: userData?.name || undefined,
+      userEmail: userData?.email || undefined,
       team: team as Team,
     });
 

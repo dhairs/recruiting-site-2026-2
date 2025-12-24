@@ -66,6 +66,11 @@ export interface ApplicationFormData {
 export interface Application {
   id: string;
   userId: string;
+  
+  // Denormalized user data (to avoid lookup on list views)
+  userName?: string;
+  userEmail?: string;
+  
   team: Team;
   
   // Multiple systems the applicant is interested in
@@ -114,5 +119,7 @@ export interface Application {
 
 export interface ApplicationCreateData {
   userId: string;
+  userName?: string;
+  userEmail?: string;
   team: Team;
 }

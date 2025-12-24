@@ -7,7 +7,6 @@ import {
   PaginatedApplicationsResult,
 } from "@/lib/firebase/applications";
 import { adminDb } from "@/lib/firebase/admin";
-import { getUser } from "@/lib/firebase/users";
 import { UserRole, Team } from "@/lib/models/User";
 import { RecruitingStep } from "@/lib/models/Config";
 import { Application } from "@/lib/models/Application";
@@ -146,18 +145,7 @@ export async function GET(request: NextRequest) {
           return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
       }
 
-      // Enrich applications with user data
-      const userIds = Array.from(new Set(paginatedResult.applications.map((app) => app.userId)));
-      const userMap = new Map();
-      await Promise.all(
-        userIds.map(async (uid) => {
-          const userAppProfile = await getUser(uid);
-          if (userAppProfile) {
-            userMap.set(uid, userAppProfile);
-          }
-        })
-      );
-
+      // Use denormalized user data from application documents (no additional reads needed)
       const enrichedApplications = paginatedResult.applications.map((app) => {
         const targetSystem = userSystem || app.preferredSystems?.[0];
         const systemRatings = targetSystem && app.aggregateRatings 
@@ -166,7 +154,7 @@ export async function GET(request: NextRequest) {
         
         return {
           ...app,
-          user: userMap.get(app.userId) || { name: "Unknown", email: "", role: "applicant" },
+          user: { name: app.userName || "Unknown", email: app.userEmail || "", role: "applicant" },
           aggregateRating: systemRatings?.reviewRating ?? null,
           interviewAggregateRating: showInterviewRatings ? (systemRatings?.interviewRating ?? null) : null,
         };
@@ -210,18 +198,7 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
     }
 
-    // Enrich ALL applications with user data
-    const userIds = Array.from(new Set(allApplications.map((app) => app.userId)));
-    const userMap = new Map();
-    await Promise.all(
-      userIds.map(async (uid) => {
-        const userAppProfile = await getUser(uid);
-        if (userAppProfile) {
-          userMap.set(uid, userAppProfile);
-        }
-      })
-    );
-
+    // Use denormalized user data from application documents (no additional reads needed)
     const enrichedApplications = allApplications.map((app) => {
       const targetSystem = userSystem || app.preferredSystems?.[0];
       const systemRatings = targetSystem && app.aggregateRatings 
@@ -230,7 +207,7 @@ export async function GET(request: NextRequest) {
       
       return {
         ...app,
-        user: userMap.get(app.userId) || { name: "Unknown", email: "", role: "applicant" },
+        user: { name: app.userName || "Unknown", email: app.userEmail || "", role: "applicant" },
         aggregateRating: systemRatings?.reviewRating ?? null,
         interviewAggregateRating: showInterviewRatings ? (systemRatings?.interviewRating ?? null) : null,
       };

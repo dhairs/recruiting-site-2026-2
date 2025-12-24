@@ -131,6 +131,8 @@ export async function createApplication(
     const application: Application = {
       id: applicationRef.id,
       userId: data.userId,
+      userName: data.userName,
+      userEmail: data.userEmail,
       team: data.team,
       status: ApplicationStatus.IN_PROGRESS,
       createdAt: now,

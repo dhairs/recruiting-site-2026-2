@@ -130,6 +130,8 @@ function generateFakeApplication(userId: string, name: string, email: string) {
 
   return {
     userId,
+    userName: name,
+    userEmail: email,
     team,
     preferredSystems,
     status,
