@@ -1,13 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useApplications } from "./ApplicationsContext";
 import { ApplicationStatus } from "@/lib/models/Application";
 import { Team, UserRole } from "@/lib/models/User";
 import { RecruitingStep } from "@/lib/models/Config";
 import { TEAM_SYSTEMS } from "@/lib/models/teamQuestions";
 import { format } from "date-fns";
-import { Search, ArrowUpDown, Star, MessageSquare } from "lucide-react";
+import { Search, ArrowUpDown, Star, MessageSquare, Loader2 } from "lucide-react";
 import clsx from "clsx";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -106,7 +106,7 @@ function getDisplayStatusForUser(
 }
 
 export default function ApplicationsSidebar() {
-  const { applications, loading, currentUser, recruitingStep } = useApplications();
+  const { applications, loading, loadingMore, hasMore, loadMore, currentUser, recruitingStep } = useApplications();
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilters, setStatusFilters] = useState<ApplicationStatus[]>([]);
   const [systemFilters, setSystemFilters] = useState<string[]>([]);
@@ -115,6 +115,27 @@ export default function ApplicationsSidebar() {
   const [sortBy, setSortBy] = useState<"date" | "name" | "rating" | "interviewRating">("date");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   const pathname = usePathname();
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  
+  // Infinite scroll handler
+  const handleScroll = useCallback(() => {
+    const container = scrollContainerRef.current;
+    if (!container || loadingMore || !hasMore) return;
+    
+    const { scrollTop, scrollHeight, clientHeight } = container;
+    // Load more when within 200px of the bottom
+    if (scrollHeight - scrollTop - clientHeight < 200) {
+      loadMore();
+    }
+  }, [loadingMore, hasMore, loadMore]);
+  
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    
+    container.addEventListener('scroll', handleScroll);
+    return () => container.removeEventListener('scroll', handleScroll);
+  }, [handleScroll]);
   
   // Check if user can see ratings (System Lead or Reviewer only)
   const canSeeRatings = currentUser?.role === UserRole.SYSTEM_LEAD || currentUser?.role === UserRole.REVIEWER;
@@ -365,7 +386,7 @@ export default function ApplicationsSidebar() {
         </div>
       </div>
       
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto" ref={scrollContainerRef}>
          {filteredApplications.map(app => (
            <Link 
              key={app.id}
@@ -415,6 +436,21 @@ export default function ApplicationsSidebar() {
               </div>
            </Link>
          ))}
+         {loadingMore && (
+           <div className="p-4 flex items-center justify-center text-neutral-500">
+             <Loader2 className="h-5 w-5 animate-spin mr-2" />
+             <span className="text-sm">Loading more...</span>
+           </div>
+         )}
+         {!loadingMore && hasMore && filteredApplications.length > 0 && (
+           <button
+             onClick={() => loadMore()}
+             className="w-full p-4 text-sm font-medium text-orange-400 hover:text-orange-300 bg-orange-500/10 hover:bg-orange-500/20 border-y border-orange-500/30 transition-colors flex items-center justify-center gap-2"
+           >
+             <Loader2 className="h-4 w-4" />
+             Load more applications
+           </button>
+         )}
          {filteredApplications.length === 0 && (
            <div className="p-8 text-center text-neutral-500 text-sm">
              {searchTerm ? "No matches found." : "No applications found."}

@@ -101,6 +101,15 @@ export interface Application {
   
   // Rejection tracking
   rejectedBySystems?: string[];             // Systems that have rejected this applicant
+  
+  // Aggregate ratings per system (updated atomically on scorecard submission)
+  aggregateRatings?: {
+    [system: string]: {
+      reviewRating?: number;      // Application review aggregate score
+      interviewRating?: number;   // Interview aggregate score
+      lastUpdated: Date;
+    };
+  };
 }
 
 export interface ApplicationCreateData {

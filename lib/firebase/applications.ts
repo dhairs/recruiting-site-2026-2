@@ -1183,10 +1183,6 @@ export async function getTeamApplications(team: Team): Promise<Application[]> {
   });
 }
 
-/**
- * Get applications for a specific System (for System Lead/Reviewer)
- * Filters by preferredSystems (array-contains).
- */
 export async function getSystemApplications(
   team: Team,
   system: string
@@ -1210,3 +1206,142 @@ export async function getSystemApplications(
   });
 }
 
+/**
+ * Paginated result type for application queries
+ */
+export interface PaginatedApplicationsResult {
+  applications: Application[];
+  nextCursor: string | null;
+  hasMore: boolean;
+}
+
+/**
+ * Helper to convert a Firestore document to an Application
+ */
+function docToApplication(doc: FirebaseFirestore.DocumentSnapshot): Application {
+  const data = doc.data()!;
+  return {
+    ...data,
+    id: doc.id,
+    createdAt: data.createdAt?.toDate() || new Date(),
+    updatedAt: data.updatedAt?.toDate() || new Date(),
+    submittedAt: data.submittedAt?.toDate(),
+    interviewOffers: normalizeInterviewOffers(data.interviewOffers),
+    trialOffers: normalizeTrialOffers(data.trialOffers),
+  } as Application;
+}
+
+/**
+ * Get ALL applications with pagination (for Admin)
+ * @param limit - Maximum number of applications to return (default 50)
+ * @param cursor - Document ID to start after for cursor-based pagination
+ */
+export async function getAllApplicationsPaginated(
+  limit: number = 50,
+  cursor?: string
+): Promise<PaginatedApplicationsResult> {
+  let query = adminDb
+    .collection(APPLICATIONS_COLLECTION)
+    .orderBy("createdAt", "desc")
+    .limit(limit + 1); // Fetch one extra to check if there are more
+
+  if (cursor) {
+    const cursorDoc = await adminDb.collection(APPLICATIONS_COLLECTION).doc(cursor).get();
+    if (cursorDoc.exists) {
+      query = query.startAfter(cursorDoc);
+    }
+  }
+
+  const snapshot = await query.get();
+  const docs = snapshot.docs;
+  
+  const hasMore = docs.length > limit;
+  const resultDocs = hasMore ? docs.slice(0, limit) : docs;
+  const nextCursor = hasMore ? resultDocs[resultDocs.length - 1].id : null;
+
+  return {
+    applications: resultDocs.map(docToApplication),
+    nextCursor,
+    hasMore,
+  };
+}
+
+/**
+ * Get applications for a specific Team with pagination (for Team Captain)
+ * @param team - The team to filter by
+ * @param limit - Maximum number of applications to return (default 50)
+ * @param cursor - Document ID to start after for cursor-based pagination
+ */
+export async function getTeamApplicationsPaginated(
+  team: Team,
+  limit: number = 50,
+  cursor?: string
+): Promise<PaginatedApplicationsResult> {
+  let query = adminDb
+    .collection(APPLICATIONS_COLLECTION)
+    .where("team", "==", team)
+    .orderBy("createdAt", "desc")
+    .limit(limit + 1);
+
+  if (cursor) {
+    const cursorDoc = await adminDb.collection(APPLICATIONS_COLLECTION).doc(cursor).get();
+    if (cursorDoc.exists) {
+      query = query.startAfter(cursorDoc);
+    }
+  }
+
+  const snapshot = await query.get();
+  const docs = snapshot.docs;
+  
+  const hasMore = docs.length > limit;
+  const resultDocs = hasMore ? docs.slice(0, limit) : docs;
+  const nextCursor = hasMore ? resultDocs[resultDocs.length - 1].id : null;
+
+  return {
+    applications: resultDocs.map(docToApplication),
+    nextCursor,
+    hasMore,
+  };
+}
+
+/**
+ * Get applications for a specific System with pagination (for System Lead/Reviewer)
+ * Filters by preferredSystems (array-contains).
+ * @param team - The team to filter by
+ * @param system - The system to filter by (must be in preferredSystems)
+ * @param limit - Maximum number of applications to return (default 50)
+ * @param cursor - Document ID to start after for cursor-based pagination
+ */
+export async function getSystemApplicationsPaginated(
+  team: Team,
+  system: string,
+  limit: number = 50,
+  cursor?: string
+): Promise<PaginatedApplicationsResult> {
+  let query = adminDb
+    .collection(APPLICATIONS_COLLECTION)
+    .where("team", "==", team)
+    .where("preferredSystems", "array-contains", system)
+    .orderBy("createdAt", "desc")
+    .limit(limit + 1);
+
+  if (cursor) {
+    const cursorDoc = await adminDb.collection(APPLICATIONS_COLLECTION).doc(cursor).get();
+    if (cursorDoc.exists) {
+      query = query.startAfter(cursorDoc);
+    }
+  }
+
+  const snapshot = await query.get();
+  const docs = snapshot.docs;
+  
+  const hasMore = docs.length > limit;
+  const resultDocs = hasMore ? docs.slice(0, limit) : docs;
+  const nextCursor = hasMore ? resultDocs[resultDocs.length - 1].id : null;
+
+  return {
+    applications: resultDocs.map(docToApplication),
+    nextCursor,
+    hasMore,
+  };
+}

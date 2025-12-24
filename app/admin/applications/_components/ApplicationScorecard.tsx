@@ -95,7 +95,18 @@ export default function ApplicationScorecard({
   }
 
   if (!loading && !scorecardConfig) {
-    return <div className="text-neutral-500">No scorecard configuration found for this team.</div>;
+    return (
+      <div className="p-4 rounded-lg bg-orange-500/10 border border-orange-500/20 text-orange-300 text-sm">
+        No scorecard configuration found for this team/system.
+        <br />
+        <a 
+          href="/admin/configuration?tab=scorecards" 
+          className="text-xs text-orange-400 hover:text-orange-300 underline"
+        >
+          Create one in Admin → Configuration → Scorecards → Application Scorecards
+        </a>
+      </div>
+    );
   }
 
   // Guard against null config if still loading

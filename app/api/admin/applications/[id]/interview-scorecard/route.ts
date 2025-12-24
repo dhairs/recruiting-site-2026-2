@@ -3,6 +3,7 @@ import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { getApplication } from "@/lib/firebase/applications";
 import { getUser } from "@/lib/firebase/users";
 import { getScorecardConfig, getScorecardConfigs } from "@/lib/firebase/scorecards";
+import { updateAggregateRating } from "@/lib/firebase/updateAggregateRating";
 import { ScorecardSubmission, ScorecardConfig } from "@/lib/models/Scorecard";
 import { Team, UserRole } from "@/lib/models/User";
 import { TEAM_SYSTEMS } from "@/lib/models/teamQuestions";
@@ -163,6 +164,12 @@ export async function POST(
     const body = await request.json();
     const { data, system } = body;
 
+    // Get the application to know the team
+    const application = await getApplication(id);
+    if (!application) {
+      return NextResponse.json({ error: "Application not found" }, { status: 404 });
+    }
+
     // Use a separate subcollection for interview scorecards
     const collectionRef = adminDb.collection("applications").doc(id).collection("interviewScorecards");
     
@@ -185,6 +192,16 @@ export async function POST(
     
     await docRef.set(submissionData, { merge: true });
 
+    // Update aggregate rating atomically
+    if (system) {
+      try {
+        await updateAggregateRating(id, system, "interview", application.team);
+      } catch (err) {
+        // Log but don't fail the request - the scorecard was saved
+        logger.error(err, "Failed to update interview aggregate rating");
+      }
+    }
+
     return NextResponse.json({ success: true });
 
   } catch (error) {
@@ -192,3 +209,4 @@ export async function POST(
     return NextResponse.json({ error: "Internal Error" }, { status: 500 });
   }
 }
+

@@ -99,9 +99,12 @@ export default function InterviewScorecard({
       <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-300 text-sm">
         No interview scorecard configuration found for this team/system.
         <br />
-        <span className="text-xs text-neutral-500">
+        <a 
+          href="/admin/configuration?tab=scorecards" 
+          className="text-xs text-blue-400 hover:text-blue-300 underline"
+        >
           Create one in Admin → Configuration → Scorecards → Interview Scorecards
-        </span>
+        </a>
       </div>
     );
   }

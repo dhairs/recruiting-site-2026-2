@@ -3,7 +3,7 @@ import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { getApplication } from "@/lib/firebase/applications";
 import { getUser } from "@/lib/firebase/users";
 import { getScorecardConfig, getScorecardConfigs } from "@/lib/firebase/scorecards";
-import { getScorecardConfig as getHardcodedScorecardConfig } from "@/lib/scorecards/config";
+import { updateAggregateRating } from "@/lib/firebase/updateAggregateRating";
 import { ScorecardSubmission, ScorecardConfig, ScorecardFieldConfig } from "@/lib/models/Scorecard";
 import { Team, UserRole } from "@/lib/models/User";
 import { TEAM_SYSTEMS } from "@/lib/models/teamQuestions";
@@ -65,15 +65,10 @@ export async function GET(
       }
     }
 
-    // Try to get config from database first, then fall back to hardcoded
-    let config: ScorecardConfig | null | undefined = null;
+    // Get config from database (no fallback to hardcoded config)
+    let config: ScorecardConfig | null = null;
     if (targetSystem) {
       config = await getScorecardConfig(application.team, targetSystem);
-    }
-    
-    // Fall back to hardcoded team config if no database config exists
-    if (!config) {
-      config = getHardcodedScorecardConfig(application.team);
     }
 
     // Get list of available systems with configs for this team
@@ -169,6 +164,12 @@ export async function POST(
     const body = await request.json();
     const { data, system } = body;
 
+    // Get the application to know the team
+    const application = await getApplication(id);
+    if (!application) {
+      return NextResponse.json({ error: "Application not found" }, { status: 404 });
+    }
+
     const collectionRef = adminDb.collection("applications").doc(id).collection("scorecards");
     
     // Use a deterministic document ID based on reviewerId and system for idempotency
@@ -190,6 +191,16 @@ export async function POST(
     
     await docRef.set(submissionData, { merge: true });
 
+    // Update aggregate rating atomically
+    if (system) {
+      try {
+        await updateAggregateRating(id, system, "review", application.team);
+      } catch (err) {
+        // Log but don't fail the request - the scorecard was saved
+        logger.error(err, "Failed to update aggregate rating");
+      }
+    }
+
     return NextResponse.json({ success: true });
 
   } catch (error) {
@@ -197,3 +208,4 @@ export async function POST(
     return NextResponse.json({ error: "Internal Error" }, { status: 500 });
   }
 }
+
