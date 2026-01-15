@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import { ApplicationStatus } from "@/lib/models/Application";
-import { TEAM_INFO, TEAM_QUESTIONS, COMMON_QUESTIONS } from "@/lib/models/teamQuestions";
-import { RecruitingStep } from "@/lib/models/Config";
+import { TEAM_INFO } from "@/lib/models/teamQuestions";
+import { ApplicationQuestion, RecruitingStep } from "@/lib/models/Config";
 import InterviewScheduler from "@/components/InterviewScheduler";
 import { useApplication } from "@/hooks/useApplication";
 import { useConfig } from "@/hooks/useConfig";
@@ -101,8 +101,33 @@ export default function ApplicationDetailPage() {
   const { application, isLoading: appLoading, error: appError, mutate } = useApplication(applicationId);
   const { recruitingStep, isLoading: configLoading } = useConfig();
 
+  // Dynamic questions from API
+  const [commonQuestions, setCommonQuestions] = useState<ApplicationQuestion[]>([]);
+  const [teamQuestions, setTeamQuestions] = useState<ApplicationQuestion[]>([]);
+
   const loading = appLoading || configLoading;
   const error = appError?.message || null;
+
+  // Fetch questions from API when application is loaded
+  useEffect(() => {
+    if (!application?.team) return;
+    const team = application.team;
+
+    async function fetchQuestions() {
+      try {
+        const res = await fetch(`/api/questions?team=${team}`);
+        if (res.ok) {
+          const data = await res.json();
+          setCommonQuestions(data.commonQuestions || []);
+          setTeamQuestions(data.teamQuestions || []);
+        }
+      } catch (err) {
+        console.error("Failed to fetch questions:", err);
+      }
+    }
+
+    fetchQuestions();
+  }, [application?.team]);
 
   useEffect(() => {
     // Check if user is staff - redirect to admin page
@@ -169,7 +194,6 @@ export default function ApplicationDetailPage() {
   }
 
   const teamInfo = TEAM_INFO.find((t) => t.team === application.team);
-  const teamQuestions = TEAM_QUESTIONS[application.team] || [];
   const stageIndex = getStageIndex(application.status);
   const statusInfo = getStatusMessage(application.status);
 
@@ -257,7 +281,7 @@ export default function ApplicationDetailPage() {
 
             <div className="space-y-6">
               {/* Common Questions */}
-              {COMMON_QUESTIONS.map((question) => {
+              {commonQuestions.map((question) => {
                 const value =
                   question.id === "graduationYear"
                     ? application.formData.graduationYear

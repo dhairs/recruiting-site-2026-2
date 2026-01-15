@@ -19,9 +19,9 @@ import {
 import clsx from "clsx";
 import { ApplicationStatus, InterviewOffer } from "@/lib/models/Application";
 import { User, UserRole, Team } from "@/lib/models/User";
-import { TEAM_SYSTEMS, TEAM_QUESTIONS, SystemOption, TeamQuestion } from "@/lib/models/teamQuestions";
+import { TEAM_SYSTEMS, SystemOption } from "@/lib/models/teamQuestions";
 import { Note, ReviewTask } from "@/lib/models/ApplicationExtras";
-import { RecruitingStep } from "@/lib/models/Config";
+import { ApplicationQuestion, RecruitingStep } from "@/lib/models/Config";
 import { useApplications } from "./ApplicationsContext";
 import ApplicationScorecard from "./ApplicationScorecard";
 import InterviewScorecard from "./InterviewScorecard";
@@ -106,7 +106,10 @@ export default function ApplicationDetail({ applicationId }: ApplicationDetailPr
     team: string;
     status: string;
     preferredSystems: string[];
-  }>>([]);
+  }>>([]); 
+  
+  // Dynamic questions from API
+  const [teamQuestions, setTeamQuestions] = useState<ApplicationQuestion[]>([]);
 
   // Fetch extras when app changes
   useEffect(() => {
@@ -126,6 +129,17 @@ export default function ApplicationDetail({ applicationId }: ApplicationDetailPr
       .then(data => setRelatedApps(data.applications || []))
       .catch(() => setRelatedApps([]));
   }, [applicationId]);
+
+  // Fetch questions when selected app changes
+  useEffect(() => {
+    if (!selectedApp?.team) return;
+    const team = selectedApp.team;
+
+    fetch(`/api/questions?team=${team}`)
+      .then(res => res.json())
+      .then(data => setTeamQuestions(data.teamQuestions || []))
+      .catch(() => setTeamQuestions([]));
+  }, [selectedApp?.team]);
 
   if (loading) {
     return (
@@ -517,8 +531,7 @@ export default function ApplicationDetail({ applicationId }: ApplicationDetailPr
                       </div>
                       
                       {selectedApp.formData.teamQuestions && Object.entries(selectedApp.formData.teamQuestions).map(([qId, answer]) => {
-                        const teamQuestions: TeamQuestion[] = TEAM_QUESTIONS[selectedApp.team as Team] || [];
-                        const question = teamQuestions.find((q: TeamQuestion) => q.id === qId);
+                        const question = teamQuestions.find((q: ApplicationQuestion) => q.id === qId);
                         return (
                           <div key={qId}>
                             <div className="h-px bg-white/5 my-8" />

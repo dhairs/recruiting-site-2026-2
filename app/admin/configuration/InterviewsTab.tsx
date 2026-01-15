@@ -31,6 +31,9 @@ export function InterviewsTab({
           <p className="text-neutral-400">
             Manage interview settings, interviewers, and availability.
           </p>
+          <p className="text-xs text-amber-500/80 mt-2">
+            ⏱ Note: Changes may take up to 1 minute to appear due to caching.
+          </p>
         </div>
 
         {showCreateButton && (

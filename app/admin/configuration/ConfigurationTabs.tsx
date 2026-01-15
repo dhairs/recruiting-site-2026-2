@@ -6,9 +6,10 @@ import { InterviewSlotConfig } from "@/lib/models/Interview";
 import { User } from "@/lib/models/User";
 import { InterviewsTab } from "./InterviewsTab";
 import { ScorecardsTab } from "./ScorecardsTab";
-import { Calendar, ClipboardList } from "lucide-react";
+import { QuestionsTab } from "./QuestionsTab";
+import { Calendar, ClipboardList, FileQuestion } from "lucide-react";
 
-type TabType = "interviews" | "scorecards";
+type TabType = "interviews" | "scorecards" | "questions";
 
 interface ConfigurationTabsProps {
   configs: InterviewSlotConfig[];
@@ -32,7 +33,7 @@ export function ConfigurationTabs({
   const tabParam = searchParams.get("tab");
   
   const [activeTab, setActiveTab] = useState<TabType>(
-    tabParam === "scorecards" ? "scorecards" : "interviews"
+    tabParam === "scorecards" ? "scorecards" : tabParam === "questions" ? "questions" : "interviews"
   );
 
   const handleTabChange = (tab: TabType) => {
@@ -43,6 +44,7 @@ export function ConfigurationTabs({
   const tabs = [
     { id: "interviews" as TabType, label: "Interviews", icon: Calendar },
     { id: "scorecards" as TabType, label: "Scorecards", icon: ClipboardList },
+    { id: "questions" as TabType, label: "Questions", icon: FileQuestion },
   ];
 
   return (
@@ -51,7 +53,7 @@ export function ConfigurationTabs({
       <div className="mb-8">
         <h1 className="text-3xl font-bold mb-2">Configuration</h1>
         <p className="text-neutral-400">
-          Manage interview and scorecard settings for your teams.
+          Manage interview, scorecard, and application question settings for your teams.
         </p>
       </div>
 
@@ -90,6 +92,8 @@ export function ConfigurationTabs({
       )}
       
       {activeTab === "scorecards" && <ScorecardsTab />}
+      
+      {activeTab === "questions" && <QuestionsTab userData={userData} />}
     </div>
   );
 }

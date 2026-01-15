@@ -21,3 +21,21 @@ export interface RecruitingConfig {
   updatedBy: string;
 }
 
+// Application Questions Configuration
+export interface ApplicationQuestion {
+  id: string;
+  label: string;
+  type: "text" | "textarea" | "select";
+  options?: string[];
+  required: boolean;
+  placeholder?: string;
+}
+
+export interface ApplicationQuestionsConfig {
+  commonQuestions: ApplicationQuestion[];
+  teamQuestions: Record<string, ApplicationQuestion[]>; // Keyed by Team enum value
+  systemQuestions?: Record<string, ApplicationQuestion[]>; // Optional system-specific questions
+  updatedAt: Date;
+  updatedBy: string;
+}
+

@@ -130,6 +130,14 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const body = await request.json();
     const { formData, preferredSystems, status } = body;
 
+    // Validate preferred systems limit (max 3)
+    if (preferredSystems && Array.isArray(preferredSystems) && preferredSystems.length > 3) {
+      return NextResponse.json(
+        { error: "You can select a maximum of 3 preferred systems" },
+        { status: 400 }
+      );
+    }
+
     let application;
 
     // If only formData is being updated, use the merge function

@@ -285,6 +285,9 @@ export function ScorecardsTab() {
               ? "Define evaluation criteria for interviews."
               : "Define evaluation criteria for application reviews."}
           </p>
+          <p className="text-xs text-amber-500/80 mt-2">
+            ⏱ Note: Changes may take up to 5 minutes to appear for reviewers due to caching.
+          </p>
         </div>
         <button
           onClick={() => setShowCreateModal(true)}

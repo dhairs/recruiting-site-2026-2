@@ -7,12 +7,8 @@ import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 import { storage } from "@/lib/firebase/client";
 import { Team } from "@/lib/models/User";
 import { Application, ApplicationStatus } from "@/lib/models/Application";
-import {
-  TEAM_QUESTIONS,
-  COMMON_QUESTIONS,
-  TEAM_SYSTEMS,
-  TEAM_INFO,
-} from "@/lib/models/teamQuestions";
+import { TEAM_SYSTEMS, TEAM_INFO } from "@/lib/models/teamQuestions";
+import { ApplicationQuestion } from "@/lib/models/Config";
 import { routes } from "@/lib/routes";
 
 // Debounce helper
@@ -49,8 +45,12 @@ export default function TeamApplicationPage() {
   ) as Team | undefined;
 
   const teamInfo = TEAM_INFO.find((t) => t.team === team);
-  const teamQuestions = team ? TEAM_QUESTIONS[team] : [];
   const systemOptions = team ? TEAM_SYSTEMS[team] : [];
+
+  // Dynamic questions from API
+  const [commonQuestions, setCommonQuestions] = useState<ApplicationQuestion[]>([]);
+  const [teamQuestions, setTeamQuestions] = useState<ApplicationQuestion[]>([]);
+  const [questionsLoading, setQuestionsLoading] = useState(true);
 
   // State
   const [application, setApplication] = useState<Application | null>(null);
@@ -77,6 +77,28 @@ export default function TeamApplicationPage() {
     major: "",
     teamQuestions: {},
   });
+
+  // Fetch questions from API
+  useEffect(() => {
+    if (!team) return;
+
+    async function fetchQuestions() {
+      try {
+        const res = await fetch(`/api/questions?team=${team}`);
+        if (res.ok) {
+          const data = await res.json();
+          setCommonQuestions(data.commonQuestions || []);
+          setTeamQuestions(data.teamQuestions || []);
+        }
+      } catch (err) {
+        console.error("Failed to fetch questions:", err);
+      } finally {
+        setQuestionsLoading(false);
+      }
+    }
+
+    fetchQuestions();
+  }, [team]);
 
   // Fetch or create application
   useEffect(() => {
@@ -262,7 +284,12 @@ export default function TeamApplicationPage() {
     // Validate required fields
     const missingFields: string[] = [];
 
-    COMMON_QUESTIONS.forEach((q) => {
+    // Resume is always required
+    if (!formData.resumeUrl) {
+      missingFields.push("Resume");
+    }
+
+    commonQuestions.forEach((q) => {
       if (q.required && !formData[q.id as keyof FormData]) {
         missingFields.push(q.label);
       }
@@ -459,29 +486,36 @@ export default function TeamApplicationPage() {
 
         {/* Application Form */}
         <form onSubmit={handleSubmit} className="space-y-8">
-          {/* Preferred Systems (Multi-select) */}
+          {/* Preferred Systems (Multi-select, max 3) */}
           <div className="p-6 rounded-2xl bg-neutral-900 border border-white/5">
             <h2 className="text-xl font-bold text-white mb-2">
               Preferred Systems
             </h2>
             <p className="text-neutral-400 text-sm mb-4">
-              Select all systems you are interested in. You may receive interview offers for any of these.
+              Select up to 3 systems you are interested in. You may receive interview offers for any of these.
+              {formData.preferredSystems.length >= 3 && (
+                <span className="text-orange-400 ml-2">(Maximum reached)</span>
+              )}
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {systemOptions.map((option) => {
                 const isSelected = formData.preferredSystems.includes(option.value);
+                const isDisabled = !isSelected && formData.preferredSystems.length >= 3;
                 return (
                   <label
                     key={option.value}
                     className={`flex items-center gap-3 p-4 rounded-lg border cursor-pointer transition-all ${
                       isSelected
                         ? "bg-[#FFB526]/10 border-[#FFB526]/50 text-white"
-                        : "bg-black border-white/10 text-neutral-300 hover:border-white/30"
+                        : isDisabled
+                          ? "bg-black/50 border-white/5 text-neutral-500 cursor-not-allowed"
+                          : "bg-black border-white/10 text-neutral-300 hover:border-white/30"
                     }`}
                   >
                     <input
                       type="checkbox"
                       checked={isSelected}
+                      disabled={isDisabled}
                       onChange={(e) => {
                         setFormData((prev) => {
                           const newSystems = e.target.checked
@@ -492,7 +526,7 @@ export default function TeamApplicationPage() {
                           return newData;
                         });
                       }}
-                      className="w-5 h-5 rounded border-neutral-600 bg-neutral-800 text-[#FFB526] focus:ring-[#FFB526] focus:ring-offset-neutral-900"
+                      className="w-5 h-5 rounded border-neutral-600 bg-neutral-800 text-[#FFB526] focus:ring-[#FFB526] focus:ring-offset-neutral-900 disabled:opacity-50"
                     />
                     <span className="font-medium">{option.label}</span>
                   </label>
@@ -507,7 +541,7 @@ export default function TeamApplicationPage() {
               About You
             </h2>
             <div className="space-y-6">
-              {COMMON_QUESTIONS.map((question) => (
+              {commonQuestions.map((question) => (
                 <div key={question.id}>
                   <label className="block text-sm font-medium text-white mb-2">
                     {question.label}
@@ -600,13 +634,13 @@ export default function TeamApplicationPage() {
             </div>
           )}
 
-          {/* Resume Upload */}
+          {/* Resume Upload - Required */}
           <div className="p-6 rounded-2xl bg-neutral-900 border border-white/5">
             <h2 className="text-xl font-bold text-white mb-4">
-              Resume (Optional)
+              Resume <span className="text-red-500">*</span>
             </h2>
             <p className="text-neutral-400 text-sm mb-4">
-              Upload your resume in PDF or Word format (max 5MB).
+              Upload your resume in PDF or Word format (max 5MB). Required.
             </p>
 
             {formData.resumeUrl ? (
