@@ -13,28 +13,38 @@ export enum Team {
 }
 
 export enum ElectricSystem {
-  ELECTRONICS = "Electronics",
-  VEHICLE_MODELING = "Vehicle Modeling",
-  POWERTRAIN = "Powertrain",
+  AERODYNAMICS = "Aerodynamics",
+  BODY = "Body",
   DYNAMICS = "Dynamics",
+  ELECTRONICS = "Electronics",
+  POWERTRAIN = "Powertrain",
+  VEHICLE_MODELING = "Vehicle Modeling",
+  OB = "OB", // Corporate Relations, PR, Sustainability, Treasury
 
   // TRACKSIDE_ENGINEERING = "Trackside Engineering",
 }
 
 export enum SolarSystem {
-  // Placeholder - to be defined
   AERODYNAMICS = "Aerodynamics",
-  SOLAR_ARRAY = "Solar Array",
-  STRATEGY = "Strategy",
-  ELECTRICAL = "Electrical",
+  COMPOSITES = "Composites",
+  POWERTRAIN = "Powertrain",
+  BODY = "Body",
+  DYNAMICS = "Dynamics",
+  VEHICLE_CONTROLS_AND_TELEMETRY = "Vehicle Controls and Telemetry",
+  POWER_SYSTEMS = "Power Systems",
+  POWER_GENERATION = "Power Generation",
+  OB = "OB", // Corporate Relations, Public Relations, Treasury
 }
 
 export enum CombustionSystem {
-  // Placeholder - to be defined
-  ENGINE = "Engine",
-  CHASSIS = "Chassis",
-  SUSPENSION = "Suspension",
-  DRIVETRAIN = "Drivetrain",
+  AERODYNAMICS = "Aerodynamics",
+  BODY = "Body",
+  COMPOSITES = "Composites",
+  DYNAMICS = "Dynamics",
+  ELECTRONICS = "Electronics",
+  POWERTRAIN = "Powertrain",
+  SIM_AI = "Sim/AI",
+  OB = "OB", // Corporate Relations, Public Relations, Treasury
 }
 
 export interface Member {
