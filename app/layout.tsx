@@ -18,6 +18,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Longhorn Racing Electric | Recruiting",
   description: "Join the premier electric racing team at UT Austin.",
+  icons: {
+    icon: "/logo.png",
+  },
 };
 
 export default function RootLayout({
