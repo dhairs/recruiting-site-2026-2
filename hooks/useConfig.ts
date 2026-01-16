@@ -1,16 +1,12 @@
 import useSWR from "swr";
 import { RecruitingStep } from "@/lib/models/Config";
+import { authFetcher } from "@/lib/auth/fetcher";
 
 interface ConfigResponse {
   config: {
     currentStep: RecruitingStep;
   };
 }
-
-const fetcher = (url: string) => fetch(url).then((res) => {
-  if (!res.ok) throw new Error("Failed to fetch config");
-  return res.json();
-});
 
 /**
  * Hook to fetch the recruiting configuration.
@@ -19,7 +15,7 @@ const fetcher = (url: string) => fetch(url).then((res) => {
 export function useConfig() {
   const { data, error, isLoading } = useSWR<ConfigResponse>(
     "/api/config",
-    fetcher
+    authFetcher
   );
 
   return {

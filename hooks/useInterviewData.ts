@@ -26,13 +26,26 @@ interface InterviewDataResponse {
   needsSystemSelection: boolean;
 }
 
-const fetcher = (url: string) => fetch(url).then(async (res) => {
+const fetcher = async (url: string) => {
+  const res = await fetch(url);
+  
+  if (res.status === 401) {
+    // Session mismatch - log out the user
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch {
+      // Ignore logout errors
+    }
+    window.location.href = "/auth/login";
+    throw new Error("Unauthorized");
+  }
+  
   if (!res.ok) {
     const data = await res.json();
     throw new Error(data.error || "Failed to load interview data");
   }
   return res.json();
-});
+};
 
 /**
  * Hook to fetch interview scheduling data for an application.

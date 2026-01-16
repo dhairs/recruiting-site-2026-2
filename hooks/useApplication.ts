@@ -1,24 +1,35 @@
 import useSWR from "swr";
 import { Application } from "@/lib/models/Application";
+import { FetchError } from "@/lib/auth/fetcher";
 
 interface ApplicationResponse {
   application: Application;
 }
 
-const fetcher = (url: string) => fetch(url).then(async (res) => {
+// Custom fetcher that handles 401 by logging out
+const fetcher = async (url: string) => {
+  const res = await fetch(url);
+  
+  if (res.status === 401) {
+    // Session mismatch - log out the user
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch {
+      // Ignore logout errors
+    }
+    window.location.href = "/auth/login";
+    throw new FetchError("Unauthorized", 401);
+  }
+  
   if (res.status === 404) {
-    const error = new Error("Application not found") as Error & { status: number };
-    error.status = 404;
-    throw error;
+    throw new FetchError("Application not found", 404);
   }
   if (res.status === 403) {
-    const error = new Error("You don't have permission to view this application") as Error & { status: number };
-    error.status = 403;
-    throw error;
+    throw new FetchError("You don't have permission to view this application", 403);
   }
   if (!res.ok) throw new Error("Failed to fetch application");
   return res.json();
-});
+};
 
 /**
  * Hook to fetch a single application by ID.

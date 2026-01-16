@@ -1,17 +1,13 @@
 import useSWR from "swr";
 import { Application } from "@/lib/models/Application";
 import { RecruitingStep, Announcement } from "@/lib/models/Config";
+import { authFetcher } from "@/lib/auth/fetcher";
 
 interface ApplicationsResponse {
   applications: Application[];
   step: RecruitingStep;
   announcement: Announcement | null;
 }
-
-const fetcher = (url: string) => fetch(url).then((res) => {
-  if (!res.ok) throw new Error("Failed to fetch applications");
-  return res.json();
-});
 
 /**
  * Hook to fetch the current user's applications and recruiting step.
@@ -20,7 +16,7 @@ const fetcher = (url: string) => fetch(url).then((res) => {
 export function useApplications() {
   const { data, error, isLoading, mutate } = useSWR<ApplicationsResponse>(
     "/api/applications",
-    fetcher
+    authFetcher
   );
 
   return {
