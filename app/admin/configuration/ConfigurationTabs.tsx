@@ -3,13 +3,15 @@
 import { useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { InterviewSlotConfig } from "@/lib/models/Interview";
-import { User } from "@/lib/models/User";
+import { User, UserRole } from "@/lib/models/User";
 import { InterviewsTab } from "./InterviewsTab";
 import { ScorecardsTab } from "./ScorecardsTab";
 import { QuestionsTab } from "./QuestionsTab";
-import { Calendar, ClipboardList, FileQuestion } from "lucide-react";
+import { TeamsTab } from "./TeamsTab";
+import { AboutTab } from "./AboutTab";
+import { Calendar, ClipboardList, FileQuestion, Users, Info } from "lucide-react";
 
-type TabType = "interviews" | "scorecards" | "questions";
+type TabType = "interviews" | "scorecards" | "questions" | "teams" | "about";
 
 interface ConfigurationTabsProps {
   configs: InterviewSlotConfig[];
@@ -33,19 +35,27 @@ export function ConfigurationTabs({
   const tabParam = searchParams.get("tab");
   
   const [activeTab, setActiveTab] = useState<TabType>(
-    tabParam === "scorecards" ? "scorecards" : tabParam === "questions" ? "questions" : "interviews"
+    tabParam === "scorecards" ? "scorecards" : tabParam === "questions" ? "questions" : tabParam === "teams" ? "teams" : tabParam === "about" && userData.role === UserRole.ADMIN ? "about" : "interviews"
   );
+
+  const isAdmin = userData.role === UserRole.ADMIN;
 
   const handleTabChange = (tab: TabType) => {
     setActiveTab(tab);
     router.push(`/admin/configuration?tab=${tab}`, { scroll: false });
   };
 
-  const tabs = [
+  const baseTabs = [
     { id: "interviews" as TabType, label: "Interviews", icon: Calendar },
     { id: "scorecards" as TabType, label: "Scorecards", icon: ClipboardList },
     { id: "questions" as TabType, label: "Questions", icon: FileQuestion },
+    { id: "teams" as TabType, label: "Teams", icon: Users },
   ];
+  
+  // Only show About tab to admins
+  const tabs = isAdmin 
+    ? [...baseTabs, { id: "about" as TabType, label: "About", icon: Info }]
+    : baseTabs;
 
   return (
     <div className="p-8 max-w-7xl mx-auto">
@@ -94,6 +104,10 @@ export function ConfigurationTabs({
       {activeTab === "scorecards" && <ScorecardsTab />}
       
       {activeTab === "questions" && <QuestionsTab userData={userData} />}
+      
+      {activeTab === "teams" && <TeamsTab userData={userData} />}
+      
+      {activeTab === "about" && isAdmin && <AboutTab />}
     </div>
   );
 }

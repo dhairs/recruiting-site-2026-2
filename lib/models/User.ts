@@ -19,7 +19,7 @@ export enum ElectricSystem {
   ELECTRONICS = "Electronics",
   POWERTRAIN = "Powertrain",
   VEHICLE_MODELING = "Vehicle Modeling",
-  OB = "OB", // Corporate Relations, PR, Sustainability, Treasury
+  OB = "Officer Board", // Corporate Relations, PR, Sustainability, Treasury
 
   // TRACKSIDE_ENGINEERING = "Trackside Engineering",
 }
@@ -33,7 +33,7 @@ export enum SolarSystem {
   VEHICLE_CONTROLS_AND_TELEMETRY = "Vehicle Controls and Telemetry",
   POWER_SYSTEMS = "Power Systems",
   POWER_GENERATION = "Power Generation",
-  OB = "OB", // Corporate Relations, Public Relations, Treasury
+  OB = "Officer Board", // Corporate Relations, Public Relations, Treasury
 }
 
 export enum CombustionSystem {
@@ -44,7 +44,7 @@ export enum CombustionSystem {
   ELECTRONICS = "Electronics",
   POWERTRAIN = "Powertrain",
   SIM_AI = "Sim/AI",
-  OB = "OB", // Corporate Relations, Public Relations, Treasury
+  OB = "Officer Board", // Corporate Relations, Public Relations, Treasury
 }
 
 export interface Member {

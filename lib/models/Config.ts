@@ -39,3 +39,42 @@ export interface ApplicationQuestionsConfig {
   updatedBy: string;
 }
 
+// Team Descriptions for About Page
+export interface SubsystemDescription {
+  name: string;
+  description: string;
+  updatedAt: Date;
+  updatedBy: string;
+}
+
+export interface TeamDescription {
+  name: string;
+  description: string;
+  subsystems: SubsystemDescription[];
+  updatedAt: Date;
+  updatedBy: string;
+}
+
+export interface TeamsConfig {
+  teams: Record<string, TeamDescription>; // Keyed by Team enum value
+  updatedAt: Date;
+  updatedBy: string;
+}
+
+// About Page Configuration (Admin only)
+export interface AboutPageConfig {
+  title: string;
+  subtitle: string;
+  missionStatement: string;
+  sections: AboutSection[];
+  updatedAt: Date;
+  updatedBy: string;
+}
+
+export interface AboutSection {
+  id: string;
+  title: string;
+  content: string;
+  order: number;
+}
+
