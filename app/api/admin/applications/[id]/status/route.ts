@@ -71,6 +71,31 @@ export async function POST(
         systemsToOffer = preferred;
       }
 
+      // System leads can ONLY extend interview offers for their own system
+      if (currentUser.role === UserRole.SYSTEM_LEAD) {
+        const userSystem = currentUser.memberProfile?.system;
+        if (!userSystem) {
+          return NextResponse.json({ 
+            error: "System lead profile not configured properly" 
+          }, { status: 403 });
+        }
+        // Filter to only their system - they cannot offer for other systems
+        const originalSystems = [...systemsToOffer];
+        systemsToOffer = systemsToOffer.filter(s => s === userSystem);
+        if (systemsToOffer.length === 0) {
+          return NextResponse.json({ 
+            error: `System leads can only extend interview offers for their own system (${userSystem}). None of the selected systems match.` 
+          }, { status: 403 });
+        }
+        if (systemsToOffer.length < originalSystems.length) {
+          logger.info({ 
+            userId: uid, 
+            original: originalSystems, 
+            filtered: systemsToOffer 
+          }, "System lead offer filtered to own system only");
+        }
+      }
+
       // Atomically create interview offers and un-reject systems in a single transaction
       // Also set reviewDecision since we're advancing from review to interview
       updatedApp = await addMultipleInterviewOffers(id, systemsToOffer, 'advanced');
@@ -99,6 +124,31 @@ export async function POST(
           }, { status: 400 });
         }
         systemsToOffer = completedInterviewSystems;
+      }
+
+      // System leads can ONLY extend trial offers for their own system
+      if (currentUser.role === UserRole.SYSTEM_LEAD) {
+        const userSystem = currentUser.memberProfile?.system;
+        if (!userSystem) {
+          return NextResponse.json({ 
+            error: "System lead profile not configured properly" 
+          }, { status: 403 });
+        }
+        // Filter to only their system - they cannot offer for other systems
+        const originalSystems = [...systemsToOffer];
+        systemsToOffer = systemsToOffer.filter(s => s === userSystem);
+        if (systemsToOffer.length === 0) {
+          return NextResponse.json({ 
+            error: `System leads can only extend trial offers for their own system (${userSystem}). None of the selected systems match.` 
+          }, { status: 403 });
+        }
+        if (systemsToOffer.length < originalSystems.length) {
+          logger.info({ 
+            userId: uid, 
+            original: originalSystems, 
+            filtered: systemsToOffer 
+          }, "System lead trial offer filtered to own system only");
+        }
       }
 
       // Atomically create trial offers and un-reject systems in a single transaction
