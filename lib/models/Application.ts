@@ -7,10 +7,11 @@ export enum ApplicationStatus {
   TRIAL = "trial",
   ACCEPTED = "accepted",
   REJECTED = "rejected",
+  WAITLISTED = "waitlisted",
 }
 
 // Stage-specific decision tracking
-export type StageDecision = 'pending' | 'advanced' | 'rejected';
+export type StageDecision = 'pending' | 'advanced' | 'rejected' | 'waitlisted';
 
 // Calendar event status tracking
 export enum InterviewEventStatus {

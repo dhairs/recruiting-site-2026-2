@@ -9,7 +9,9 @@ const STEP_ORDER: RecruitingStep[] = [
   RecruitingStep.INTERVIEWING,
   RecruitingStep.RELEASE_TRIAL,
   RecruitingStep.TRIAL_WORKDAY,
-  RecruitingStep.RELEASE_DECISIONS,
+  RecruitingStep.RELEASE_DECISIONS_DAY1,
+  RecruitingStep.RELEASE_DECISIONS_DAY2,
+  RecruitingStep.RELEASE_DECISIONS_DAY3,
 ];
 
 /**
@@ -95,10 +97,13 @@ export function getUserVisibleStatus(
     }
   }
   
-  // Trial decision visible at RELEASE_DECISIONS
-  if (isAtOrPast(currentStep, RecruitingStep.RELEASE_DECISIONS)) {
+  // Trial decision visible at RELEASE_DECISIONS_DAY1 (or later days)
+  if (isAtOrPast(currentStep, RecruitingStep.RELEASE_DECISIONS_DAY1)) {
     if (app.trialDecision === 'rejected') {
       return ApplicationStatus.REJECTED;
+    }
+    if (app.trialDecision === 'waitlisted') {
+      return ApplicationStatus.WAITLISTED;
     }
     if (app.trialDecision === 'advanced') {
       return ApplicationStatus.ACCEPTED;

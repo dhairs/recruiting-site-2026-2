@@ -38,7 +38,9 @@ async function isInterviewSchedulingAllowed(): Promise<boolean> {
   const blockedSteps = [
     RecruitingStep.RELEASE_TRIAL,
     RecruitingStep.TRIAL_WORKDAY,
-    RecruitingStep.RELEASE_DECISIONS,
+    RecruitingStep.RELEASE_DECISIONS_DAY1,
+    RecruitingStep.RELEASE_DECISIONS_DAY2,
+    RecruitingStep.RELEASE_DECISIONS_DAY3,
   ];
   return !blockedSteps.includes(config.currentStep as RecruitingStep);
 }

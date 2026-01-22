@@ -20,7 +20,9 @@ const RECRUITING_STEP_ORDER: RecruitingStep[] = [
   RecruitingStep.INTERVIEWING,
   RecruitingStep.RELEASE_TRIAL,
   RecruitingStep.TRIAL_WORKDAY,
-  RecruitingStep.RELEASE_DECISIONS,
+  RecruitingStep.RELEASE_DECISIONS_DAY1,
+  RecruitingStep.RELEASE_DECISIONS_DAY2,
+  RecruitingStep.RELEASE_DECISIONS_DAY3,
 ];
 
 function isRecruitingStepAtOrPast(currentStep: RecruitingStep | null, targetStep: RecruitingStep): boolean {
@@ -32,22 +34,24 @@ function isRecruitingStepAtOrPast(currentStep: RecruitingStep | null, targetStep
 
 // Status Badge Component
 function StatusBadge({ status }: { status: ApplicationStatus }) {
-  const styles = {
+  const styles: Record<ApplicationStatus, string> = {
     [ApplicationStatus.IN_PROGRESS]: "bg-yellow-500/10 text-yellow-400 border-yellow-500/20",
     [ApplicationStatus.SUBMITTED]: "bg-blue-500/10 text-blue-400 border-blue-500/20",
     [ApplicationStatus.INTERVIEW]: "bg-cyan-500/10 text-cyan-400 border-cyan-500/20",
     [ApplicationStatus.ACCEPTED]: "bg-green-500/10 text-green-400 border-green-500/20",
     [ApplicationStatus.REJECTED]: "bg-red-500/10 text-red-500 border-red-500/20",
     [ApplicationStatus.TRIAL]: "bg-purple-500/10 text-purple-400 border-purple-500/20",
+    [ApplicationStatus.WAITLISTED]: "bg-amber-500/10 text-amber-400 border-amber-500/20",
   };
 
-  const labels: Record<string, string> = {
+  const labels: Record<ApplicationStatus, string> = {
     [ApplicationStatus.IN_PROGRESS]: "In Progress",
     [ApplicationStatus.SUBMITTED]: "Submitted",
     [ApplicationStatus.INTERVIEW]: "Interview",
     [ApplicationStatus.ACCEPTED]: "Accepted",
     [ApplicationStatus.REJECTED]: "Rejected",
     [ApplicationStatus.TRIAL]: "Trial",
+    [ApplicationStatus.WAITLISTED]: "Waitlisted",
   };
 
   return (
@@ -64,6 +68,7 @@ const STATUS_LABELS: Record<string, string> = {
   [ApplicationStatus.ACCEPTED]: "Accepted",
   [ApplicationStatus.REJECTED]: "Rejected",
   [ApplicationStatus.TRIAL]: "Trial",
+  [ApplicationStatus.WAITLISTED]: "Waitlisted",
 };
 
 function getStatusLabel(status: string): string {

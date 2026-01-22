@@ -1,5 +1,5 @@
 import { adminDb } from "./admin";
-import { RecruitingConfig, RecruitingStep, Announcement, ApplicationQuestionsConfig, ApplicationQuestion, TeamsConfig, TeamDescription, SubsystemDescription, AboutPageConfig, AboutSection } from "@/lib/models/Config";
+import { RecruitingConfig, RecruitingStep, Announcement, ApplicationQuestionsConfig, ApplicationQuestion, TeamsConfig, TeamDescription, SubsystemDescription, AboutPageConfig, AboutSection, DashboardConfig, DashboardDeadline, DashboardResource } from "@/lib/models/Config";
 import { COMMON_QUESTIONS, TEAM_QUESTIONS } from "@/lib/models/teamQuestions";
 import { Team, ElectricSystem, SolarSystem, CombustionSystem } from "@/lib/models/User";
 
@@ -9,6 +9,7 @@ const ANNOUNCEMENT_DOC = "announcement";
 const QUESTIONS_DOC = "application_questions";
 const TEAMS_DOC = "teams";
 const ABOUT_DOC = "about_page";
+const DASHBOARD_DOC = "dashboard";
 
 export async function getRecruitingConfig(): Promise<RecruitingConfig> {
   const doc = await adminDb.collection(CONFIG_COLLECTION).doc(RECRUITING_DOC).get();
@@ -405,6 +406,64 @@ export async function updateAboutPageConfig(
   adminId: string
 ): Promise<void> {
   await adminDb.collection(CONFIG_COLLECTION).doc(ABOUT_DOC).set({
+    ...config,
+    updatedAt: new Date(),
+    updatedBy: adminId,
+  });
+}
+
+// Dashboard Config Functions
+
+/**
+ * Get default dashboard config
+ */
+export function getDefaultDashboardConfig(): DashboardConfig {
+  return {
+    deadlines: [],
+    resources: [],
+    updatedAt: new Date(),
+    updatedBy: "system",
+  };
+}
+
+/**
+ * Get dashboard config from Firestore
+ */
+export async function getDashboardConfig(): Promise<DashboardConfig> {
+  const doc = await adminDb.collection(CONFIG_COLLECTION).doc(DASHBOARD_DOC).get();
+  
+  if (doc.exists) {
+    const data = doc.data();
+    return {
+      deadlines: (data?.deadlines || []).map((d: Record<string, unknown>) => ({
+        id: d.id as string,
+        title: d.title as string,
+        date: d.date as string,
+        description: d.description as string | undefined,
+        autoFromStep: d.autoFromStep as RecruitingStep | undefined,
+      })),
+      resources: (data?.resources || []).map((r: Record<string, unknown>) => ({
+        id: r.id as string,
+        title: r.title as string,
+        url: r.url as string,
+        description: r.description as string | undefined,
+      })),
+      updatedAt: data?.updatedAt?.toDate() || new Date(),
+      updatedBy: data?.updatedBy || "system",
+    };
+  }
+
+  return getDefaultDashboardConfig();
+}
+
+/**
+ * Update dashboard config (Admin only)
+ */
+export async function updateDashboardConfig(
+  config: Omit<DashboardConfig, "updatedAt" | "updatedBy">,
+  adminId: string
+): Promise<void> {
+  await adminDb.collection(CONFIG_COLLECTION).doc(DASHBOARD_DOC).set({
     ...config,
     updatedAt: new Date(),
     updatedBy: adminId,

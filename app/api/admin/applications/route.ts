@@ -29,7 +29,9 @@ const RECRUITING_STEP_ORDER: RecruitingStep[] = [
   RecruitingStep.INTERVIEWING,
   RecruitingStep.RELEASE_TRIAL,
   RecruitingStep.TRIAL_WORKDAY,
-  RecruitingStep.RELEASE_DECISIONS,
+  RecruitingStep.RELEASE_DECISIONS_DAY1,
+  RecruitingStep.RELEASE_DECISIONS_DAY2,
+  RecruitingStep.RELEASE_DECISIONS_DAY3,
 ];
 
 function isRecruitingStepAtOrPast(currentStep: RecruitingStep | null, targetStep: RecruitingStep): boolean {

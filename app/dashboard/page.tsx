@@ -47,6 +47,12 @@ function getStatusBadge(status: ApplicationStatus, isApplicationsOpen: boolean) 
       text: "text-purple-400",
       label: "Trial Workday",
     },
+    [ApplicationStatus.WAITLISTED]: {
+      bg: "bg-amber-500/10",
+      border: "border-amber-500/20",
+      text: "text-amber-400",
+      label: "Waitlisted",
+    },
   };
 
   // Override for In Progress when closed
@@ -389,7 +395,9 @@ function DashboardContent() {
             {/* Trial Workday Section - show after trial release */}
             {(recruitingStep === RecruitingStep.RELEASE_TRIAL || 
               recruitingStep === RecruitingStep.TRIAL_WORKDAY ||
-              recruitingStep === RecruitingStep.RELEASE_DECISIONS) &&
+              recruitingStep === RecruitingStep.RELEASE_DECISIONS_DAY1 ||
+              recruitingStep === RecruitingStep.RELEASE_DECISIONS_DAY2 ||
+              recruitingStep === RecruitingStep.RELEASE_DECISIONS_DAY3) &&
               applications.some((app) => app.trialOffers && app.trialOffers.length > 0) && (
               <div className="p-6 rounded-2xl bg-neutral-900 border border-white/5">
                 <h2 className="text-xl font-bold text-white mb-4">

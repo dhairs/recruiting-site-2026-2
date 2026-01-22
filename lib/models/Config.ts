@@ -5,7 +5,9 @@ export enum RecruitingStep {
   INTERVIEWING = "interviewing",
   RELEASE_TRIAL = "release_trial",
   TRIAL_WORKDAY = "trial_workday",
-  RELEASE_DECISIONS = "release_decisions",
+  RELEASE_DECISIONS_DAY1 = "release_decisions_day1",
+  RELEASE_DECISIONS_DAY2 = "release_decisions_day2",
+  RELEASE_DECISIONS_DAY3 = "release_decisions_day3",
 }
 
 export interface Announcement {
@@ -78,3 +80,25 @@ export interface AboutSection {
   order: number;
 }
 
+// Dashboard Configuration (Admin only)
+export interface DashboardDeadline {
+  id: string;
+  title: string;
+  date: string; // ISO date string
+  description?: string;
+  autoFromStep?: RecruitingStep; // If set, date auto-updates based on step
+}
+
+export interface DashboardResource {
+  id: string;
+  title: string;
+  url: string;
+  description?: string;
+}
+
+export interface DashboardConfig {
+  deadlines: DashboardDeadline[];
+  resources: DashboardResource[];
+  updatedAt: Date;
+  updatedBy: string;
+}

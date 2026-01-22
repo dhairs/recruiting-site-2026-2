@@ -34,7 +34,9 @@ const RECRUITING_STEP_ORDER: RecruitingStep[] = [
   RecruitingStep.INTERVIEWING,
   RecruitingStep.RELEASE_TRIAL,
   RecruitingStep.TRIAL_WORKDAY,
-  RecruitingStep.RELEASE_DECISIONS,
+  RecruitingStep.RELEASE_DECISIONS_DAY1,
+  RecruitingStep.RELEASE_DECISIONS_DAY2,
+  RecruitingStep.RELEASE_DECISIONS_DAY3,
 ];
 
 function isRecruitingStepAtOrPast(currentStep: RecruitingStep | null, targetStep: RecruitingStep): boolean {
@@ -198,7 +200,9 @@ export default function ApplicationDetail({ applicationId }: ApplicationDetailPr
     const isTrialMode = recruitingStep === RecruitingStep.INTERVIEWING;
     const isDecisionMode = recruitingStep === RecruitingStep.RELEASE_TRIAL || 
                           recruitingStep === RecruitingStep.TRIAL_WORKDAY || 
-                          recruitingStep === RecruitingStep.RELEASE_DECISIONS;
+                          recruitingStep === RecruitingStep.RELEASE_DECISIONS_DAY1 ||
+                          recruitingStep === RecruitingStep.RELEASE_DECISIONS_DAY2 ||
+                          recruitingStep === RecruitingStep.RELEASE_DECISIONS_DAY3;
 
     if (isDecisionMode) {
       setAcceptFormData({

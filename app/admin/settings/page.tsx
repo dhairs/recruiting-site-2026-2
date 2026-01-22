@@ -13,7 +13,9 @@ const STEP_DESCRIPTIONS: Record<RecruitingStep, string> = {
   [RecruitingStep.INTERVIEWING]: "Interviews in progress. Rejections still masked.",
   [RecruitingStep.RELEASE_TRIAL]: "Applicants can see Trial invites. Rejections masked.",
   [RecruitingStep.TRIAL_WORKDAY]: "Trials in progress.",
-  [RecruitingStep.RELEASE_DECISIONS]: "All decisions (Accepted/Rejected) are visible to applicants.",
+  [RecruitingStep.RELEASE_DECISIONS_DAY1]: "Day 1: Early acceptances, rejections, and waitlist are visible.",
+  [RecruitingStep.RELEASE_DECISIONS_DAY2]: "Day 2: Waitlist updates visible. Some waitlisted applicants may be accepted.",
+  [RecruitingStep.RELEASE_DECISIONS_DAY3]: "Day 3: Final decisions. All accepts, rejects, and waitlist resolutions visible.",
 };
 
 export default function AdminSettingsPage() {
