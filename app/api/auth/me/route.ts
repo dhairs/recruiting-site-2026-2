@@ -25,7 +25,11 @@ export async function GET(request: NextRequest) {
     }
 
     const userData = userDoc.data();
-    return NextResponse.json({ user: { uid, ...userData } }, { status: 200 });
+    
+    // Remove sensitive fields that shouldn't be exposed to client
+    const { blacklisted, ...safeUserData } = userData || {};
+    
+    return NextResponse.json({ user: { uid, ...safeUserData } }, { status: 200 });
   } catch (error) {
     logger.error(error, "Failed to get current user");
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

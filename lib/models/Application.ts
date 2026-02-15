@@ -83,6 +83,10 @@ export interface Application {
   reviewDecision?: StageDecision;      // Decision from review stage
   interviewDecision?: StageDecision;   // Decision from interview stage  
   trialDecision?: StageDecision;       // Decision from trial stage
+  
+  // Track which release day the trial decision was made (1, 2, or 3)
+  // Decision is only visible to applicant on or after this day
+  trialDecisionDay?: 1 | 2 | 3;
 
   // Offer Details
   offer?: {

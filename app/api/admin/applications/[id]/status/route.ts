@@ -3,6 +3,8 @@ import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { updateApplication, addMultipleInterviewOffers, addMultipleTrialOffers, getApplication } from "@/lib/firebase/applications";
 import { ApplicationStatus } from "@/lib/models/Application";
 import { UserRole, User } from "@/lib/models/User";
+import { RecruitingStep } from "@/lib/models/Config";
+import { getRecruitingConfig } from "@/lib/firebase/config";
 import { getStageDecisionForStatus } from "@/lib/utils/statusUtils";
 import pino from "pino";
 
@@ -35,6 +37,17 @@ export async function POST(
 
     if (!Object.values(ApplicationStatus).includes(status)) {
        return NextResponse.json({ error: "Invalid status" }, { status: 400 });
+    }
+
+    // Prevent waitlisting/accepting/rejecting of applications that aren't submitted
+    if (status === ApplicationStatus.WAITLISTED || status === ApplicationStatus.ACCEPTED) {
+      const application = await getApplication(id);
+      if (!application) {
+        return NextResponse.json({ error: "Application not found" }, { status: 404 });
+      }
+      if (application.status === ApplicationStatus.IN_PROGRESS) {
+        return NextResponse.json({ error: "Cannot waitlist or accept an in-progress application" }, { status: 400 });
+      }
     }
 
     // Reviewers cannot advance or reject applicants - they can only submit scorecards and notes
@@ -177,6 +190,23 @@ export async function POST(
         updateData[field] = decision;
       }
 
+      // If this is a trial decision (accept/reject/waitlist), track which day it was made
+      if (field === 'trialDecision') {
+        const config = await getRecruitingConfig();
+        const currentStep = config.currentStep;
+        
+        // Determine which day the decision was made
+        let decisionDay: 1 | 2 | 3 = 1;
+        if (currentStep === RecruitingStep.RELEASE_DECISIONS_DAY2) {
+          decisionDay = 2;
+        } else if (currentStep === RecruitingStep.RELEASE_DECISIONS_DAY3) {
+          decisionDay = 3;
+        }
+        
+        updateData.trialDecisionDay = decisionDay;
+        logger.info({ decisionDay, currentStep }, "Set trial decision day");
+      }
+
       // If accepting, save offer details if provided
       if (status === ApplicationStatus.ACCEPTED && offer) {
         updateData.offer = {
@@ -187,20 +217,17 @@ export async function POST(
       
       // If rejecting from interview stage, clear interview offers
       if (application.status === ApplicationStatus.INTERVIEW && status === ApplicationStatus.REJECTED) {
-         // IMPORTANT: Preserve interviewOffers so the UI doesn't change and give away rejection
-         // updateData.interviewOffers = [];
-         
-         // Clear selected system if they haven't started interviewing? 
-         // Actually, better to preserve everything.
-         // updateData.selectedInterviewSystem = null;
-         logger.info("Preserving interview offers (rejection masking)");
+         // Clear interview offers when rejected
+         updateData.interviewOffers = [];
+         updateData.selectedInterviewSystem = null;
+         logger.info("Clearing interview offers (rejection)");
       }
       
-      // If rejecting from trial stage, clear trial offers
-      if (application.status === ApplicationStatus.TRIAL && status === ApplicationStatus.REJECTED) {
-         // IMPORTANT: Preserve trialOffers so the UI doesn't change and give away rejection
-         // updateData.trialOffers = [];
-         logger.info("Preserving trial offers (rejection masking)");
+      // If rejecting or waitlisting from trial stage, clear trial offers
+      if (application.status === ApplicationStatus.TRIAL && 
+          (status === ApplicationStatus.REJECTED || status === ApplicationStatus.WAITLISTED)) {
+         updateData.trialOffers = [];
+         logger.info("Clearing trial offers (rejection/waitlist)");
       }
       
       logger.info({ updateData }, "About to update application with data");

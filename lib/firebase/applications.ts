@@ -1004,13 +1004,24 @@ export async function rejectApplicationFromSystems(
   const currentStep = config.currentStep;
   
   // Steps where we should remove offers when rejecting
-  // At INTERVIEWING and later stages, preserve offers for history
-  const stepsWhereOffersCanBeRemoved = [
+  // At INTERVIEWING and later stages, preserve interview offers for history
+  const stepsWhereInterviewOffersCanBeRemoved = [
     RecruitingStep.OPEN, 
     RecruitingStep.REVIEWING, 
     RecruitingStep.RELEASE_INTERVIEWS
   ];
-  const isBeforeInterviewStage = stepsWhereOffersCanBeRemoved.includes(currentStep);
+  const isBeforeInterviewStage = stepsWhereInterviewOffersCanBeRemoved.includes(currentStep);
+  
+  // Steps where trial offers should be preserved (trial stage and later)
+  // Before trial stage, remove trial offers when rejecting (allows undoing accidental advancements)
+  const stepsWhereTrialOffersPreserved = [
+    RecruitingStep.RELEASE_TRIAL,
+    RecruitingStep.TRIAL_WORKDAY,
+    RecruitingStep.RELEASE_DECISIONS_DAY1,
+    RecruitingStep.RELEASE_DECISIONS_DAY2,
+    RecruitingStep.RELEASE_DECISIONS_DAY3,
+  ];
+  const isTrialStageOrLater = stepsWhereTrialOffersPreserved.includes(currentStep);
 
   const applicationRef = adminDb.collection(APPLICATIONS_COLLECTION).doc(applicationId);
 
@@ -1029,16 +1040,21 @@ export async function rejectApplicationFromSystems(
     const existingRejections = (data.rejectedBySystems || []) as string[];
     const newRejections = [...new Set([...existingRejections, ...systems])];
 
-    // Only remove offers if BEFORE interview stage (based on recruiting step)
-    // At/after interview stage, preserve offers for history
+    // Remove interview offers if BEFORE interview stage
+    // At/after interview stage, preserve interview offers for history
     let remainingInterviewOffers = existingOffers;
     let remainingTrialOffers = existingTrialOffers;
 
     if (isBeforeInterviewStage) {
-      // Before interview stage - remove offers from rejected systems
+      // Before interview stage - remove interview offers from rejected systems
       remainingInterviewOffers = existingOffers.filter(
         o => !systems.includes(o.system)
       );
+    }
+    
+    // Remove trial offers if BEFORE trial stage (allows undoing accidental advancements)
+    // At/after trial stage, preserve trial offers for history
+    if (!isTrialStageOrLater) {
       remainingTrialOffers = existingTrialOffers.filter(
         o => !systems.includes(o.system)
       );
@@ -1060,9 +1076,8 @@ export async function rejectApplicationFromSystems(
       updatedAt: FieldValue.serverTimestamp(),
     };
 
-    // Only update offers in Firestore if we're removing them (before interview stage)
-    if (isBeforeInterviewStage) {
-      updateData.interviewOffers = remainingInterviewOffers.map(prepareOfferForFirestore);
+    // Update trial offers if we're before trial stage (removing them)
+    if (!isTrialStageOrLater) {
       updateData.trialOffers = remainingTrialOffers.map((offer) => ({
         system: offer.system,
         status: offer.status,
@@ -1071,6 +1086,11 @@ export async function rejectApplicationFromSystems(
         accepted: offer.accepted,
         rejectionReason: offer.rejectionReason,
       }));
+    }
+
+    // Update interview offers in Firestore if we're before interview stage (removing them)
+    if (isBeforeInterviewStage) {
+      updateData.interviewOffers = remainingInterviewOffers.map(prepareOfferForFirestore);
     }
 
     // Determine stage decisions based on recruiting step and remaining offers
@@ -1096,6 +1116,15 @@ export async function rejectApplicationFromSystems(
           // All trial offers rejected
           updateData.trialDecision = 'rejected';
           updateData.status = ApplicationStatus.REJECTED;
+          
+          // Track which day the decision was made
+          let decisionDay: 1 | 2 | 3 = 1;
+          if (currentStep === RecruitingStep.RELEASE_DECISIONS_DAY2) {
+            decisionDay = 2;
+          } else if (currentStep === RecruitingStep.RELEASE_DECISIONS_DAY3) {
+            decisionDay = 3;
+          }
+          updateData.trialDecisionDay = decisionDay;
         }
       } else if (existingOffers.length > 0) {
         // Update stage decisions based on whether any interview offers still exist

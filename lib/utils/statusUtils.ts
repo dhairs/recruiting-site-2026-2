@@ -61,10 +61,20 @@ export function getStageDecisionForStatus(
     }
   }
   
-  // Moving from trial to rejected
+  // Moving from trial to rejected or waitlisted
   if (currentStatus === ApplicationStatus.TRIAL) {
     if (newStatus === ApplicationStatus.REJECTED) {
       return { field: 'trialDecision', decision: 'rejected' };
+    }
+    if (newStatus === ApplicationStatus.WAITLISTED) {
+      return { field: 'trialDecision', decision: 'waitlisted' };
+    }
+  }
+
+  // Also allow waitlisting from interview stage (in case there's no trial workday phase)
+  if (currentStatus === ApplicationStatus.INTERVIEW) {
+    if (newStatus === ApplicationStatus.WAITLISTED) {
+      return { field: 'trialDecision', decision: 'waitlisted' };
     }
   }
   
@@ -97,8 +107,20 @@ export function getUserVisibleStatus(
     }
   }
   
-  // Trial decision visible at RELEASE_DECISIONS_DAY1 (or later days)
-  if (isAtOrPast(currentStep, RecruitingStep.RELEASE_DECISIONS_DAY1)) {
+  // Trial decision visible based on which day the decision was made
+  // Day 1 decisions visible at DAY1+, Day 2 decisions visible at DAY2+, Day 3 decisions visible at DAY3+
+  const trialDecisionDay = app.trialDecisionDay || 1; // Default to day 1 for backwards compatibility
+  
+  // Map decision day to the recruiting step when it becomes visible
+  const dayToStep: Record<1 | 2 | 3, RecruitingStep> = {
+    1: RecruitingStep.RELEASE_DECISIONS_DAY1,
+    2: RecruitingStep.RELEASE_DECISIONS_DAY2,
+    3: RecruitingStep.RELEASE_DECISIONS_DAY3,
+  };
+  
+  const decisionVisibleAtStep = dayToStep[trialDecisionDay];
+  
+  if (isAtOrPast(currentStep, decisionVisibleAtStep)) {
     if (app.trialDecision === 'rejected') {
       return ApplicationStatus.REJECTED;
     }

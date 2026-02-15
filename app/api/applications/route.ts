@@ -36,12 +36,26 @@ async function getCurrentUserUid(request: NextRequest): Promise<string | null> {
 }
 
 /**
- * Masks the application status based on the global recruiting step.
- * Uses stage-specific decisions to determine what status the user should see.
+ * Sanitizes and masks the application data for applicant viewing.
+ * Removes internal decision fields and masks status based on recruiting step.
  */
-function maskApplicationStatus(app: Application, step: RecruitingStep): Application {
-  const effectiveStatus = getUserVisibleStatus(app, step);
-  return { ...app, status: effectiveStatus };
+function sanitizeApplicationForApplicant(app: Application, step: RecruitingStep): Partial<Application> {
+  const visibleStatus = getUserVisibleStatus(app, step);
+  
+  // Remove sensitive internal decision fields
+  const {
+    reviewDecision,
+    interviewDecision,
+    trialDecision,
+    rejectedBySystems,
+    status: rawStatus,
+    ...safeData
+  } = app;
+  
+  return { 
+    ...safeData, 
+    status: visibleStatus 
+  };
 }
 
 /**
@@ -63,13 +77,13 @@ export async function GET(request: NextRequest) {
         getAnnouncement()
     ]);
 
-    const maskedApplications = applications.map(app => maskApplicationStatus(app, config.currentStep));
+    const sanitizedApplications = applications.map(app => sanitizeApplicationForApplicant(app, config.currentStep));
 
     // Only include announcement if it's enabled
     const activeAnnouncement: Announcement | null = announcement?.enabled ? announcement : null;
 
     return NextResponse.json({ 
-      applications: maskedApplications,
+      applications: sanitizedApplications,
       step: config.currentStep,
       announcement: activeAnnouncement
     }, { status: 200 });

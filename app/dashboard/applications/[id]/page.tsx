@@ -50,6 +50,13 @@ function getStatusMessage(status: ApplicationStatus): { title: string; descripti
         description: "Unfortunately, we were not able to move forward with your application at this time.",
         color: "text-red-400",
       };
+      // rahul k was here --dhairya
+    case ApplicationStatus.WAITLISTED:
+      return {
+        title: "Application Waitlisted",
+        description: "You've been placed on the waitlist. We'll notify you if a spot becomes available.",
+        color: "text-yellow-400",
+      };
     default:
       return {
         title: "Unknown Status",

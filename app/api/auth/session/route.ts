@@ -8,6 +8,12 @@ import pino from "pino";
 
 const logger = pino();
 
+const allowed_emails_extras = [
+  "lhroutreach@gmail.com",
+  "longhornracingrecruitment@gmail.com"
+]
+
+
 export async function POST(request: Request) {
   const { idToken } = await request.json();
 
@@ -41,24 +47,24 @@ export async function POST(request: Request) {
 
     const user: UserRecord = await adminAuth.getUser(decodedId.uid);
 
-    // if (!user.email?.endsWith("@utexas.edu")) {
-    //   const response = NextResponse.json(
-    //     {
-    //       status: "error",
-    //       error:
-    //         "You must use your UTMail @utexas.edu email address. https://get.utmail.utexas.edu/",
-    //     },
-    //     { status: 400 }
-    //   );
+    if (!user.email?.endsWith("@utexas.edu") && !allowed_emails_extras.includes(user.email || "")) {
+      const response = NextResponse.json(
+        {
+          status: "error",
+          error:
+            "You must use your UTMail @utexas.edu email address. https://get.utmail.utexas.edu/",
+        },
+        { status: 400 }
+      );
 
-    //   return response;
-    // }
+      return response;
+    }
 
     const existingUser = await getUser(decodedId.uid);
     let role = UserRole.APPLICANT;
 
     if (existingUser) {
-        role = existingUser.role;
+      role = existingUser.role;
     } else {
       logger.info("User didn't exist, creating new user");
       // user doesn't exist, create a new user document for them
@@ -86,7 +92,7 @@ export async function POST(request: Request) {
     );
 
     response.cookies.set(options);
-    
+
     // Set user_role cookie for middleware role checks
     response.cookies.set({
       name: "user_role",

@@ -69,13 +69,27 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    // Mask the status based on recruiting step
-    const maskedApplication = {
-      ...application,
-      status: getUserVisibleStatus(application, config.currentStep)
+    // Get the user-visible status
+    const visibleStatus = getUserVisibleStatus(application, config.currentStep);
+
+    // Sanitize the application data to remove internal decision fields
+    // These should NEVER be sent to applicants as they could reveal rejection before release
+    const {
+      reviewDecision,
+      interviewDecision,
+      trialDecision,
+      rejectedBySystems,
+      status: rawStatus, // Exclude raw status, we'll use visible status
+      ...safeApplicationData
+    } = application;
+
+    // Return sanitized application with visible status
+    const sanitizedApplication = {
+      ...safeApplicationData,
+      status: visibleStatus,
     };
 
-    return NextResponse.json({ application: maskedApplication }, { status: 200 });
+    return NextResponse.json({ application: sanitizedApplication }, { status: 200 });
   } catch (error) {
     logger.error({ err: error }, "Failed to get application");
     return NextResponse.json(

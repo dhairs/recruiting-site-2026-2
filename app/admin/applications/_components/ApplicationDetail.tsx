@@ -60,6 +60,7 @@ const STATUS_LABELS: Record<string, string> = {
   [ApplicationStatus.ACCEPTED]: "Accepted",
   [ApplicationStatus.REJECTED]: "Rejected",
   [ApplicationStatus.TRIAL]: "Trial",
+  [ApplicationStatus.WAITLISTED]: "Waitlisted",
 };
 
 function getStatusLabel(status: string): string {
@@ -101,6 +102,11 @@ export default function ApplicationDetail({ applicationId }: ApplicationDetailPr
   const [showInterviewDetailModal, setShowInterviewDetailModal] = useState(false);
   const [selectedInterviewOffer, setSelectedInterviewOffer] = useState<InterviewOffer | null>(null);
   const [interviewStatusUpdating, setInterviewStatusUpdating] = useState(false);
+  const [showWaitlistModal, setShowWaitlistModal] = useState(false);
+  const [waitlistFormData, setWaitlistFormData] = useState<{
+    system: string;
+    details: string;
+  }>({ system: '', details: '' });
 
   // Related applications state (other teams this user applied to)
   const [relatedApps, setRelatedApps] = useState<Array<{
@@ -223,6 +229,14 @@ export default function ApplicationDetail({ applicationId }: ApplicationDetailPr
       setSelectedInterviewSystems(existingOfferSystems);
       setShowInterviewModal(true);
     }
+  };
+
+  const handleWaitlistClick = () => {
+    setWaitlistFormData({
+      system: selectedApp.preferredSystems?.[0] || '',
+      details: ''
+    });
+    setShowWaitlistModal(true);
   };
 
   const handleRejectClick = () => {
@@ -663,24 +677,60 @@ export default function ApplicationDetail({ applicationId }: ApplicationDetailPr
                   </div>
 
                   {/* Only show Advance/Reject buttons for non-reviewers */}
-                  {currentUser?.role !== UserRole.REVIEWER && (
-                    <div className="grid grid-cols-2 gap-3">
-                      <button 
-                        disabled={statusLoading}
-                        onClick={handleRejectClick}
-                        className="flex items-center justify-center gap-2 py-2 rounded-lg bg-neutral-800 text-white text-sm font-medium hover:bg-neutral-700 transition-colors border border-white/5 disabled:opacity-50"
-                      >
-                        <XCircle className="h-4 w-4" /> Reject
-                      </button>
-                      <button
-                        disabled={statusLoading}
-                        onClick={handleAdvanceClick}
-                        className="flex items-center justify-center gap-2 py-2 rounded-lg bg-orange-600 text-white text-sm font-medium hover:bg-orange-500 transition-colors shadow-lg shadow-orange-900/20 disabled:opacity-50"
-                      >
-                        <CheckCircle className="h-4 w-4" /> Advance
-                      </button>
-                    </div>
-                  )}
+                  {currentUser?.role !== UserRole.REVIEWER && (() => {
+                    const isDecisionMode = recruitingStep === RecruitingStep.RELEASE_TRIAL || 
+                                          recruitingStep === RecruitingStep.TRIAL_WORKDAY || 
+                                          recruitingStep === RecruitingStep.RELEASE_DECISIONS_DAY1 ||
+                                          recruitingStep === RecruitingStep.RELEASE_DECISIONS_DAY2 ||
+                                          recruitingStep === RecruitingStep.RELEASE_DECISIONS_DAY3;
+                    
+                    if (isDecisionMode) {
+                      return (
+                        <div className="grid grid-cols-3 gap-2">
+                          <button 
+                            disabled={statusLoading}
+                            onClick={handleRejectClick}
+                            className="flex items-center justify-center gap-1.5 py-2 rounded-lg bg-neutral-800 text-white text-sm font-medium hover:bg-neutral-700 transition-colors border border-white/5 disabled:opacity-50"
+                          >
+                            <XCircle className="h-4 w-4" /> Reject
+                          </button>
+                          <button
+                            disabled={statusLoading}
+                            onClick={handleWaitlistClick}
+                            className="flex items-center justify-center gap-1.5 py-2 rounded-lg bg-yellow-600 text-white text-sm font-medium hover:bg-yellow-500 transition-colors shadow-lg shadow-yellow-900/20 disabled:opacity-50"
+                          >
+                            <Clock className="h-4 w-4" /> Waitlist
+                          </button>
+                          <button
+                            disabled={statusLoading}
+                            onClick={handleAdvanceClick}
+                            className="flex items-center justify-center gap-1.5 py-2 rounded-lg bg-green-600 text-white text-sm font-medium hover:bg-green-500 transition-colors shadow-lg shadow-green-900/20 disabled:opacity-50"
+                          >
+                            <CheckCircle className="h-4 w-4" /> Accept
+                          </button>
+                        </div>
+                      );
+                    }
+                    
+                    return (
+                      <div className="grid grid-cols-2 gap-3">
+                        <button 
+                          disabled={statusLoading}
+                          onClick={handleRejectClick}
+                          className="flex items-center justify-center gap-2 py-2 rounded-lg bg-neutral-800 text-white text-sm font-medium hover:bg-neutral-700 transition-colors border border-white/5 disabled:opacity-50"
+                        >
+                          <XCircle className="h-4 w-4" /> Reject
+                        </button>
+                        <button
+                          disabled={statusLoading}
+                          onClick={handleAdvanceClick}
+                          className="flex items-center justify-center gap-2 py-2 rounded-lg bg-orange-600 text-white text-sm font-medium hover:bg-orange-500 transition-colors shadow-lg shadow-orange-900/20 disabled:opacity-50"
+                        >
+                          <CheckCircle className="h-4 w-4" /> Advance
+                        </button>
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 <div className="h-px bg-white/5" />
@@ -904,7 +954,7 @@ export default function ApplicationDetail({ applicationId }: ApplicationDetailPr
              </aside>
              
              {/* Modals */}
-             {(showInterviewModal || showTrialModal || showRejectModal || showAcceptModal || showEditModal || showInterviewDetailModal) && (
+             {(showInterviewModal || showTrialModal || showRejectModal || showAcceptModal || showEditModal || showInterviewDetailModal || showWaitlistModal) && (
                <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
                  {/* This is a wrapper for all modals. Since modals are absolute/fixed, they will render on top. 
                      However, simpler to just inline them or put them in body. 
@@ -999,13 +1049,33 @@ export default function ApplicationDetail({ applicationId }: ApplicationDetailPr
                             </select>
                             <select value={acceptFormData.role} onChange={(e) => setAcceptFormData({ ...acceptFormData, role: e.target.value })} className="w-full bg-neutral-800 border border-white/10 rounded-lg px-4 py-3 text-white">
                                <option value="Member">Member</option>
-                               <option value="Lead">Lead</option>
                             </select>
                             <textarea value={acceptFormData.details} onChange={(e) => setAcceptFormData({ ...acceptFormData, details: e.target.value })} placeholder="Details..." className="w-full bg-neutral-800 border border-white/10 rounded-lg px-4 py-3 text-white min-h-[100px]" />
                           </div>
                           <div className="flex gap-3">
                             <button onClick={() => setShowAcceptModal(false)} className="flex-1 py-2 rounded-lg bg-neutral-800 text-white font-medium border border-white/10">Cancel</button>
                             <button onClick={() => { handleStatusUpdate(ApplicationStatus.ACCEPTED, undefined, acceptFormData); }} disabled={statusLoading || !acceptFormData.system} className="flex-1 py-2 bg-green-600 text-white rounded-lg font-medium">Accept</button>
+                          </div>
+                       </div>
+                    </div>
+                 )}
+
+                 {/* Waitlist Modal */}
+                 {showWaitlistModal && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm pointer-events-auto">
+                       <div className="bg-neutral-900 border border-white/10 rounded-2xl p-6 max-w-md w-full mx-4 shadow-2xl">
+                          <h3 className="text-xl font-bold text-white mb-6">Waitlist Application</h3>
+                          <p className="text-neutral-400 text-sm mb-4">The applicant will be notified that they are on the waitlist when decisions are released.</p>
+                          <div className="space-y-4 mb-6">
+                            <select value={waitlistFormData.system} onChange={(e) => setWaitlistFormData({ ...waitlistFormData, system: e.target.value })} className="w-full bg-neutral-800 border border-white/10 rounded-lg px-4 py-3 text-white">
+                               <option value="" disabled>Select System</option>
+                               {handleSystemOptions().map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                            </select>
+                            <textarea value={waitlistFormData.details} onChange={(e) => setWaitlistFormData({ ...waitlistFormData, details: e.target.value })} placeholder="Internal notes (optional)..." className="w-full bg-neutral-800 border border-white/10 rounded-lg px-4 py-3 text-white min-h-[80px]" />
+                          </div>
+                          <div className="flex gap-3">
+                            <button onClick={() => setShowWaitlistModal(false)} className="flex-1 py-2 rounded-lg bg-neutral-800 text-white font-medium border border-white/10">Cancel</button>
+                            <button onClick={() => { handleStatusUpdate(ApplicationStatus.WAITLISTED, undefined, waitlistFormData); setShowWaitlistModal(false); }} disabled={statusLoading || !waitlistFormData.system} className="flex-1 py-2 bg-yellow-600 text-white rounded-lg font-medium">Waitlist</button>
                           </div>
                        </div>
                     </div>

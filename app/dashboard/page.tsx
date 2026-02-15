@@ -392,19 +392,25 @@ function DashboardContent() {
               )}
             </div>
 
-            {/* Trial Workday Section - show after trial release */}
+            {/* Trial Workday Section - show after trial release, only for TRIAL status apps */}
             {(recruitingStep === RecruitingStep.RELEASE_TRIAL || 
               recruitingStep === RecruitingStep.TRIAL_WORKDAY ||
               recruitingStep === RecruitingStep.RELEASE_DECISIONS_DAY1 ||
               recruitingStep === RecruitingStep.RELEASE_DECISIONS_DAY2 ||
               recruitingStep === RecruitingStep.RELEASE_DECISIONS_DAY3) &&
-              applications.some((app) => app.trialOffers && app.trialOffers.length > 0) && (
+              applications.some((app) => 
+                app.status === ApplicationStatus.TRIAL && 
+                app.trialOffers && app.trialOffers.length > 0
+              ) && (
               <div className="p-6 rounded-2xl bg-neutral-900 border border-white/5">
                 <h2 className="text-xl font-bold text-white mb-4">
                   🎉 Trial Workday Invite
                 </h2>
                 {applications
-                  .filter((app) => app.trialOffers && app.trialOffers.length > 0)
+                  .filter((app) => 
+                    app.status === ApplicationStatus.TRIAL && 
+                    app.trialOffers && app.trialOffers.length > 0
+                  )
                   .map((app) => {
                     const trialOffer = app.trialOffers![0];
                     const teamInfo = TEAM_INFO.find((t) => t.team === app.team);
