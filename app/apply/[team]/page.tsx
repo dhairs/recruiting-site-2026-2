@@ -576,21 +576,45 @@ export default function TeamApplicationPage() {
                       <span className="text-red-500 ml-1">*</span>
                     )}
                   </label>
-                  {question.type === "select" ? (
-                    <select
-                      name={question.id}
-                      value={formData[question.id as keyof FormData] as string}
-                      onChange={handleChange}
-                      className="w-full px-4 py-3 rounded-lg bg-black border border-white/10 text-white focus:border-[#FFB526] focus:outline-none transition-colors"
-                    >
-                      <option value="">Select...</option>
-                      {question.options?.map((option) => (
-                        <option key={option} value={option}>
-                          {option}
-                        </option>
-                      ))}
-                    </select>
-                  ) : question.type === "text" ? (
+                  {question.type === "select" ? (() => {
+                    const currentVal = (formData[question.id as keyof FormData] as string) || "";
+                    const isOtherSelected = question.allowOther && currentVal !== "" && !question.options?.includes(currentVal);
+                    return (
+                      <>
+                        <select
+                          name={question.id}
+                          value={isOtherSelected ? "__other__" : currentVal}
+                          onChange={(e) => {
+                            if (e.target.value === "__other__") {
+                              handleChange({ target: { name: question.id, value: " " } } as React.ChangeEvent<HTMLInputElement>);
+                            } else {
+                              handleChange(e as unknown as React.ChangeEvent<HTMLInputElement>);
+                            }
+                          }}
+                          className="w-full px-4 py-3 rounded-lg bg-black border border-white/10 text-white focus:border-[#FFB526] focus:outline-none transition-colors"
+                        >
+                          <option value="">Select...</option>
+                          {question.options?.map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                          {question.allowOther && (
+                            <option value="__other__">Other</option>
+                          )}
+                        </select>
+                        {isOtherSelected && (
+                          <input
+                            type="text"
+                            value={currentVal.trim()}
+                            onChange={(e) => handleChange({ target: { name: question.id, value: e.target.value || " " } } as React.ChangeEvent<HTMLInputElement>)}
+                            placeholder="Please specify..."
+                            className="w-full px-4 py-3 mt-2 rounded-lg bg-black border border-white/10 text-white placeholder-neutral-500 focus:border-[#FFB526] focus:outline-none transition-colors"
+                          />
+                        )}
+                      </>
+                    );
+                  })() : question.type === "text" ? (
                     <>
                       <input
                         type="text"

@@ -268,16 +268,30 @@ export function QuestionsTab({ userData }: QuestionsTabProps) {
           )}
 
           {question.type === "select" && (
-            <div>
-              <label className="text-xs text-neutral-400 mb-1 block">Options (comma-separated)</label>
-              <input
-                type="text"
-                value={question.options?.join(", ") || ""}
-                onChange={(e) => updateQuestion(scope, key, index, "options", e.target.value.split(",").map(s => s.trim()))}
-                disabled={!canEdit}
-                className="w-full bg-neutral-900 border border-white/10 rounded px-3 py-2 text-sm disabled:opacity-50"
-                placeholder="Option 1, Option 2, Option 3..."
-              />
+            <div className="space-y-2">
+              <div>
+                <label className="text-xs text-neutral-400 mb-1 block">Options (comma-separated)</label>
+                <input
+                  type="text"
+                  value={question.options?.join(", ") || ""}
+                  onChange={(e) => updateQuestion(scope, key, index, "options", e.target.value.split(",").map(s => s.trim()))}
+                  disabled={!canEdit}
+                  className="w-full bg-neutral-900 border border-white/10 rounded px-3 py-2 text-sm disabled:opacity-50"
+                  placeholder="Option 1, Option 2, Option 3..."
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={question.allowOther || false}
+                  onChange={(e) => updateQuestion(scope, key, index, "allowOther", e.target.checked)}
+                  disabled={!canEdit}
+                  className="rounded border-white/10 bg-neutral-900"
+                />
+                <label className="text-xs text-neutral-400">
+                  Allow &quot;Other&quot; option (adds a text input for custom answers)
+                </label>
+              </div>
             </div>
           )}
         </div>
