@@ -767,19 +767,29 @@ export default function TeamApplicationPage() {
                   </svg>
                   <span className="text-white text-sm">Resume uploaded</span>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setFormData((prev) => {
-                      const newData = { ...prev, resumeUrl: "" };
-                      saveFormData(newData);
-                      return newData;
-                    });
-                  }}
-                  className="text-red-400 hover:text-red-300 text-sm"
-                >
-                  Remove
-                </button>
+                <div className="flex items-center gap-3">
+                  <a
+                    href={formData.resumeUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[#FFB526] hover:text-[#e6a220] text-sm font-medium transition-colors"
+                  >
+                    Preview
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFormData((prev) => {
+                        const newData = { ...prev, resumeUrl: "" };
+                        saveFormData(newData);
+                        return newData;
+                      });
+                    }}
+                    className="text-red-400 hover:text-red-300 text-sm"
+                  >
+                    Remove
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="relative">
@@ -832,48 +842,72 @@ export default function TeamApplicationPage() {
             )}
           </div>
 
-          {/* Submit Button */}
-          <div className="flex flex-col sm:flex-row gap-4">
-            <button
-              type="button"
-              onClick={() => saveFormData(formData)}
-              disabled={saving}
-              className="flex-1 h-12 rounded-lg border border-white/20 text-white font-medium hover:bg-white/5 transition-colors disabled:opacity-50"
-            >
-              Save Progress
-            </button>
-            <button
-              type="submit"
-              disabled={submitting}
-              className="flex-1 h-12 rounded-lg bg-[#FFB526] text-black font-medium hover:bg-[#e6a220] transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-            >
-              {submitting ? (
-                <>
-                  <svg
-                    className="animate-spin h-5 w-5"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                  >
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    />
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                    />
+          {/* Save Status + Submit */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-end h-6">
+              {saveStatus === "saving" && (
+                <span className="text-sm text-neutral-500 flex items-center gap-2">
+                  <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                   </svg>
-                  Submitting...
-                </>
-              ) : (
-                "Submit Application"
+                  Saving...
+                </span>
               )}
-            </button>
+              {saveStatus === "saved" && (
+                <span className="text-sm text-green-500 flex items-center gap-2">
+                  <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                  Saved
+                </span>
+              )}
+              {saveStatus === "error" && (
+                <span className="text-sm text-red-500">Failed to save</span>
+              )}
+            </div>
+            <div className="flex flex-col sm:flex-row gap-4">
+              <button
+                type="button"
+                onClick={() => saveFormData(formData)}
+                disabled={saving}
+                className="flex-1 h-12 rounded-lg border border-white/20 text-white font-medium hover:bg-white/5 transition-colors disabled:opacity-50"
+              >
+                Save Progress
+              </button>
+              <button
+                type="submit"
+                disabled={submitting}
+                className="flex-1 h-12 rounded-lg bg-[#FFB526] text-black font-medium hover:bg-[#e6a220] transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {submitting ? (
+                  <>
+                    <svg
+                      className="animate-spin h-5 w-5"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                      />
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                      />
+                    </svg>
+                    Submitting...
+                  </>
+                ) : (
+                  "Submit Application"
+                )}
+              </button>
+            </div>
           </div>
         </form>
       </div>

@@ -274,7 +274,8 @@ export function QuestionsTab({ userData }: QuestionsTabProps) {
                 <input
                   type="text"
                   value={question.options?.join(", ") || ""}
-                  onChange={(e) => updateQuestion(scope, key, index, "options", e.target.value.split(",").map(s => s.trim()))}
+                  onChange={(e) => updateQuestion(scope, key, index, "options", e.target.value.split(","))}
+                  onBlur={(e) => updateQuestion(scope, key, index, "options", e.target.value.split(",").map(s => s.trim()).filter(s => s))}
                   disabled={!canEdit}
                   className="w-full bg-neutral-900 border border-white/10 rounded px-3 py-2 text-sm disabled:opacity-50"
                   placeholder="Option 1, Option 2, Option 3..."
