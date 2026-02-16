@@ -50,7 +50,7 @@ function getStatusMessage(status: ApplicationStatus): { title: string; descripti
         description: "Unfortunately, we were not able to move forward with your application at this time.",
         color: "text-red-400",
       };
-      // rahul k was here --dhairya
+    // rahul k was here --dhairya
     case ApplicationStatus.WAITLISTED:
       return {
         title: "Application Waitlisted",
@@ -271,21 +271,21 @@ export default function ApplicationDetailPage() {
                   question.id === "graduationYear"
                     ? application.formData.graduationYear
                     : question.id === "major"
-                    ? application.formData.major
-                    : question.id === "whyJoin"
-                    ? application.formData.whyJoin
-                    : question.id === "relevantExperience"
-                    ? application.formData.relevantExperience
-                    : question.id === "availability"
-                    ? application.formData.availability
-                    : null;
+                      ? application.formData.major
+                      : question.id === "whyJoin"
+                        ? application.formData.whyJoin
+                        : question.id === "relevantExperience"
+                          ? application.formData.relevantExperience
+                          : question.id === "availability"
+                            ? application.formData.availability
+                            : null;
 
                 if (!value) return null;
 
                 return (
                   <div key={question.id} className="border-b border-white/5 pb-4 last:border-0">
                     <h4 className="text-sm font-medium text-neutral-400 mb-2">{question.label}</h4>
-                    <p className="text-white whitespace-pre-wrap">{value}</p>
+                    <p className="text-white whitespace-pre-wrap break-words overflow-hidden">{value}</p>
                   </div>
                 );
               })}
@@ -298,7 +298,7 @@ export default function ApplicationDetailPage() {
                 return (
                   <div key={question.id} className="border-b border-white/5 pb-4 last:border-0">
                     <h4 className="text-sm font-medium text-neutral-400 mb-2">{question.label}</h4>
-                    <p className="text-white whitespace-pre-wrap">{value}</p>
+                    <p className="text-white whitespace-pre-wrap break-words overflow-hidden">{value}</p>
                   </div>
                 );
               })}

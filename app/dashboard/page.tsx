@@ -86,13 +86,13 @@ function getStatusBadge(status: ApplicationStatus, isApplicationsOpen: boolean) 
 import { RecruitingStep } from "@/lib/models/Config";
 
 // Trial Offer Response Component
-function TrialOfferResponse({ 
-  applicationId, 
-  system, 
-  onResponse 
-}: { 
-  applicationId: string; 
-  system: string; 
+function TrialOfferResponse({
+  applicationId,
+  system,
+  onResponse
+}: {
+  applicationId: string;
+  system: string;
   onResponse: () => void;
 }) {
   const [loading, setLoading] = useState(false);
@@ -228,10 +228,10 @@ function DashboardContent() {
 
   // Handle errors / showing closed status
   const handleApplyClick = (e: React.MouseEvent) => {
-      if (!isApplicationsOpen) {
-          e.preventDefault();
-          toast.error("Applications are currently closed.");
-      }
+    if (!isApplicationsOpen) {
+      e.preventDefault();
+      toast.error("Applications are currently closed.");
+    }
   };
 
   return (
@@ -253,7 +253,7 @@ function DashboardContent() {
 
         {/* Closed Banner */}
         {!isApplicationsOpen && (
-             <div className="mb-6 p-4 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm flex items-center gap-3">
+          <div className="mb-6 p-4 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm flex items-center gap-3">
             <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
               <path
                 fillRule="evenodd"
@@ -335,17 +335,17 @@ function DashboardContent() {
                     No applications yet
                   </h3>
                   <p className="text-neutral-400 text-sm mb-6">
-                    {isApplicationsOpen 
-                        ? "Start your journey by applying to one of our teams." 
-                        : "Applications are closed for this cycle."}
+                    {isApplicationsOpen
+                      ? "Start your journey by applying to one of our teams."
+                      : "Applications are closed for this cycle."}
                   </p>
                   {isApplicationsOpen && (
-                      <Link
-                        href={routes.apply}
-                        className="inline-flex h-10 items-center justify-center rounded-lg bg-[#FFB526] px-6 text-sm font-medium text-black hover:bg-[#e6a220] transition-colors"
-                      >
-                        Apply Now
-                      </Link>
+                    <Link
+                      href={routes.apply}
+                      className="inline-flex h-10 items-center justify-center rounded-lg bg-[#FFB526] px-6 text-sm font-medium text-black hover:bg-[#e6a220] transition-colors"
+                    >
+                      Apply Now
+                    </Link>
                   )}
                 </div>
               ) : (
@@ -353,12 +353,12 @@ function DashboardContent() {
                   {applications.map((app) => {
                     const teamInfo = TEAM_INFO.find((t) => t.team === app.team);
                     const isInProgress = app.status === ApplicationStatus.IN_PROGRESS;
-                    
+
                     // In-progress apps link to apply page, submitted apps link to detail page
                     const linkHref = isInProgress && isApplicationsOpen
                       ? routes.applyTeam(app.team)
                       : `/dashboard/applications/${app.id}`;
-                    
+
                     return (
                       <Link
                         key={app.id}
@@ -393,71 +393,71 @@ function DashboardContent() {
             </div>
 
             {/* Trial Workday Section - show after trial release, only for TRIAL status apps */}
-            {(recruitingStep === RecruitingStep.RELEASE_TRIAL || 
+            {(recruitingStep === RecruitingStep.RELEASE_TRIAL ||
               recruitingStep === RecruitingStep.TRIAL_WORKDAY ||
               recruitingStep === RecruitingStep.RELEASE_DECISIONS_DAY1 ||
               recruitingStep === RecruitingStep.RELEASE_DECISIONS_DAY2 ||
               recruitingStep === RecruitingStep.RELEASE_DECISIONS_DAY3) &&
-              applications.some((app) => 
-                app.status === ApplicationStatus.TRIAL && 
+              applications.some((app) =>
+                app.status === ApplicationStatus.TRIAL &&
                 app.trialOffers && app.trialOffers.length > 0
               ) && (
-              <div className="p-6 rounded-2xl bg-neutral-900 border border-white/5">
-                <h2 className="text-xl font-bold text-white mb-4">
-                  🎉 Trial Workday Invite
-                </h2>
-                {applications
-                  .filter((app) => 
-                    app.status === ApplicationStatus.TRIAL && 
-                    app.trialOffers && app.trialOffers.length > 0
-                  )
-                  .map((app) => {
-                    const trialOffer = app.trialOffers![0];
-                    const teamInfo = TEAM_INFO.find((t) => t.team === app.team);
-                    const hasResponded = trialOffer.accepted !== undefined;
-                    
-                    return (
-                      <div 
-                        key={app.id}
-                        className="p-4 rounded-lg bg-black/50 border border-purple-500/20"
-                      >
-                        <div className="flex items-center gap-3 mb-4">
-                          <span className="text-2xl">{teamInfo?.icon}</span>
-                          <div>
-                            <h3 className="font-medium text-white">
-                              {teamInfo?.name} - {trialOffer.system}
-                            </h3>
-                            <p className="text-sm text-neutral-400">
-                              Trial Workday Invitation
-                            </p>
-                          </div>
-                        </div>
-                        
-                        {hasResponded ? (
-                          <div className={`p-3 rounded-lg ${trialOffer.accepted ? 'bg-green-500/10 border border-green-500/20' : 'bg-red-500/10 border border-red-500/20'}`}>
-                            <p className={`text-sm font-medium ${trialOffer.accepted ? 'text-green-400' : 'text-red-400'}`}>
-                              {trialOffer.accepted ? '✅ You accepted this trial workday' : '❌ You declined this trial workday'}
-                            </p>
-                            {trialOffer.rejectionReason && (
-                              <p className="text-xs text-neutral-400 mt-1">
-                                Reason: {trialOffer.rejectionReason}
+                <div className="p-6 rounded-2xl bg-neutral-900 border border-white/5">
+                  <h2 className="text-xl font-bold text-white mb-4">
+                    🎉 Trial Workday Invite
+                  </h2>
+                  {applications
+                    .filter((app) =>
+                      app.status === ApplicationStatus.TRIAL &&
+                      app.trialOffers && app.trialOffers.length > 0
+                    )
+                    .map((app) => {
+                      const trialOffer = app.trialOffers![0];
+                      const teamInfo = TEAM_INFO.find((t) => t.team === app.team);
+                      const hasResponded = trialOffer.accepted !== undefined;
+
+                      return (
+                        <div
+                          key={app.id}
+                          className="p-4 rounded-lg bg-black/50 border border-purple-500/20"
+                        >
+                          <div className="flex items-center gap-3 mb-4">
+                            <span className="text-2xl">{teamInfo?.icon}</span>
+                            <div>
+                              <h3 className="font-medium text-white">
+                                {teamInfo?.name} - {trialOffer.system}
+                              </h3>
+                              <p className="text-sm text-neutral-400">
+                                Trial Workday Invitation
                               </p>
-                            )}
+                            </div>
                           </div>
-                        ) : (
-                          <TrialOfferResponse 
-                            applicationId={app.id} 
-                            system={trialOffer.system}
-                            onResponse={() => {
-                              mutate();
-                            }}
-                          />
-                        )}
-                      </div>
-                    );
-                  })}
-              </div>
-            )}
+
+                          {hasResponded ? (
+                            <div className={`p-3 rounded-lg ${trialOffer.accepted ? 'bg-green-500/10 border border-green-500/20' : 'bg-red-500/10 border border-red-500/20'}`}>
+                              <p className={`text-sm font-medium ${trialOffer.accepted ? 'text-green-400' : 'text-red-400'}`}>
+                                {trialOffer.accepted ? '✅ You accepted this trial workday' : '❌ You declined this trial workday'}
+                              </p>
+                              {trialOffer.rejectionReason && (
+                                <p className="text-xs text-neutral-400 mt-1">
+                                  Reason: {trialOffer.rejectionReason}
+                                </p>
+                              )}
+                            </div>
+                          ) : (
+                            <TrialOfferResponse
+                              applicationId={app.id}
+                              system={trialOffer.system}
+                              onResponse={() => {
+                                mutate();
+                              }}
+                            />
+                          )}
+                        </div>
+                      );
+                    })}
+                </div>
+              )}
 
             {/* Quick Apply Section */}
             {availableTeams.length > 0 && applications.length > 0 && isApplicationsOpen && (
@@ -505,7 +505,7 @@ function DashboardContent() {
                     <span className="text-xs font-medium text-orange-400 mb-1 block">
                       📢 Important
                     </span>
-                    <p className="text-sm text-white whitespace-pre-wrap">
+                    <p className="text-sm text-white whitespace-pre-wrap break-words">
                       {announcement.message}
                     </p>
                   </div>
@@ -515,14 +515,14 @@ function DashboardContent() {
                     {isApplicationsOpen ? "New" : "Notice"}
                   </span>
                   <h3 className="text-sm font-bold text-white mb-1">
-                    {isApplicationsOpen 
-                        ? "Applications Open" 
-                        : "Applications Closed"}
+                    {isApplicationsOpen
+                      ? "Applications Open"
+                      : "Applications Closed"}
                   </h3>
                   <p className="text-xs text-neutral-400">
                     {isApplicationsOpen
-                        ? "We're now accepting applications for the Spring 2025 semester!"
-                        : "Applications are no longer being accepted at this time."}
+                      ? "We're now accepting applications for the Spring 2025 semester!"
+                      : "Applications are no longer being accepted at this time."}
                   </p>
                 </div>
                 <div className="p-4 rounded-lg bg-black/50 border border-white/5">

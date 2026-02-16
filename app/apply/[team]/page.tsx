@@ -533,10 +533,10 @@ export default function TeamApplicationPage() {
                   <label
                     key={option.value}
                     className={`flex items-center gap-3 p-4 rounded-lg border cursor-pointer transition-all ${isSelected
-                        ? "bg-[#FFB526]/10 border-[#FFB526]/50 text-white"
-                        : isDisabled
-                          ? "bg-black/50 border-white/5 text-neutral-500 cursor-not-allowed"
-                          : "bg-black border-white/10 text-neutral-300 hover:border-white/30"
+                      ? "bg-[#FFB526]/10 border-[#FFB526]/50 text-white"
+                      : isDisabled
+                        ? "bg-black/50 border-white/5 text-neutral-500 cursor-not-allowed"
+                        : "bg-black border-white/10 text-neutral-300 hover:border-white/30"
                       }`}
                   >
                     <input
@@ -602,7 +602,7 @@ export default function TeamApplicationPage() {
                       />
                       {question.maxWordCount && (
                         <p className={`text-xs mt-1 text-right ${countWords((formData[question.id as keyof FormData] as string) || "") > question.maxWordCount
-                            ? "text-red-400" : "text-neutral-500"
+                          ? "text-red-400" : "text-neutral-500"
                           }`}>
                           {countWords((formData[question.id as keyof FormData] as string) || "")} / {question.maxWordCount} words
                         </p>
@@ -616,11 +616,11 @@ export default function TeamApplicationPage() {
                         onChange={handleChange}
                         placeholder={question.placeholder}
                         rows={4}
-                        className="w-full px-4 py-3 rounded-lg bg-black border border-white/10 text-white placeholder-neutral-500 focus:border-[#FFB526] focus:outline-none transition-colors resize-none"
+                        className="w-full px-4 py-3 rounded-lg bg-black border border-white/10 text-white placeholder-neutral-500 focus:border-[#FFB526] focus:outline-none transition-colors resize-y"
                       />
                       {question.maxWordCount && (
                         <p className={`text-xs mt-1 text-right ${countWords((formData[question.id as keyof FormData] as string) || "") > question.maxWordCount
-                            ? "text-red-400" : "text-neutral-500"
+                          ? "text-red-400" : "text-neutral-500"
                           }`}>
                           {countWords((formData[question.id as keyof FormData] as string) || "")} / {question.maxWordCount} words
                         </p>
@@ -671,11 +671,11 @@ export default function TeamApplicationPage() {
                           }
                           placeholder={question.placeholder}
                           rows={4}
-                          className="w-full px-4 py-3 rounded-lg bg-black border border-white/10 text-white placeholder-neutral-500 focus:border-red-500 focus:outline-none transition-colors resize-none"
+                          className="w-full px-4 py-3 rounded-lg bg-black border border-white/10 text-white placeholder-neutral-500 focus:border-red-500 focus:outline-none transition-colors resize-y"
                         />
                         {question.maxWordCount && (
                           <p className={`text-xs mt-1 text-right ${countWords(formData.teamQuestions[question.id] || "") > question.maxWordCount
-                              ? "text-red-400" : "text-neutral-500"
+                            ? "text-red-400" : "text-neutral-500"
                             }`}>
                             {countWords(formData.teamQuestions[question.id] || "")} / {question.maxWordCount} words
                           </p>
