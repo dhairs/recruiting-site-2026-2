@@ -47,18 +47,18 @@ export async function POST(request: Request) {
 
     const user: UserRecord = await adminAuth.getUser(decodedId.uid);
 
-    if (!user.email?.endsWith("@utexas.edu") && !allowed_emails_extras.includes(user.email || "")) {
-      const response = NextResponse.json(
-        {
-          status: "error",
-          error:
-            "You must use your UTMail @utexas.edu email address. https://get.utmail.utexas.edu/",
-        },
-        { status: 400 }
-      );
+    // if (!user.email?.endsWith("@utexas.edu") && !allowed_emails_extras.includes(user.email || "")) {
+    //   const response = NextResponse.json(
+    //     {
+    //       status: "error",
+    //       error:
+    //         "You must use your UTMail @utexas.edu email address. https://get.utmail.utexas.edu/",
+    //     },
+    //     { status: 400 }
+    //   );
 
-      return response;
-    }
+    //   return response;
+    // }
 
     const existingUser = await getUser(decodedId.uid);
     let role = UserRole.APPLICANT;
