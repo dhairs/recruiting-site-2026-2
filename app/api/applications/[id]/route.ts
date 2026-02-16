@@ -6,12 +6,16 @@ import {
   updateApplicationFormData,
 } from "@/lib/firebase/applications";
 import { ApplicationStatus } from "@/lib/models/Application";
-import { getRecruitingConfig } from "@/lib/firebase/config";
+import { getRecruitingConfig, getApplicationQuestions } from "@/lib/firebase/config";
 import { RecruitingStep } from "@/lib/models/Config";
 import { getUserVisibleStatus } from "@/lib/utils/statusUtils";
 import pino from "pino";
 
 const logger = pino();
+
+function countWords(text: string): number {
+  return text.trim() === "" ? 0 : text.trim().split(/\s+/).length;
+}
 
 /**
  * Helper to get the current user's UID from the session cookie
@@ -116,7 +120,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     // Check Global Recruiting Step
     const config = await getRecruitingConfig();
     if (config.currentStep !== RecruitingStep.OPEN) {
-        return NextResponse.json({ error: "Applications are closed" }, { status: 403 });
+      return NextResponse.json({ error: "Applications are closed" }, { status: 403 });
     }
 
     const existingApplication = await getApplication(id);
@@ -150,6 +154,46 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         { error: "You can select a maximum of 3 preferred systems" },
         { status: 400 }
       );
+    }
+
+    // Validate word counts when submitting
+    if (status === ApplicationStatus.SUBMITTED) {
+      const mergedFormData = formData
+        ? { ...existingApplication.formData, ...formData }
+        : existingApplication.formData;
+
+      try {
+        const questionsConfig = await getApplicationQuestions();
+        const team = existingApplication.team;
+        const allQuestions = [
+          ...questionsConfig.commonQuestions,
+          ...(questionsConfig.teamQuestions[team] || []),
+          ...Object.values(questionsConfig.systemQuestions || {}).flat(),
+        ];
+
+        const overLimitFields: string[] = [];
+        for (const q of allQuestions) {
+          if (q.maxWordCount && (q.type === "text" || q.type === "textarea")) {
+            // Check both top-level form fields and teamQuestions
+            const value =
+              mergedFormData?.[q.id as string] ||
+              mergedFormData?.teamQuestions?.[q.id] ||
+              "";
+            if (typeof value === "string" && countWords(value) > q.maxWordCount) {
+              overLimitFields.push(`${q.label} (max ${q.maxWordCount} words)`);
+            }
+          }
+        }
+
+        if (overLimitFields.length > 0) {
+          return NextResponse.json(
+            { error: `The following fields exceed the word limit: ${overLimitFields.join(", ")}` },
+            { status: 400 }
+          );
+        }
+      } catch (err) {
+        logger.warn({ err }, "Could not validate word counts, proceeding without validation");
+      }
     }
 
     let application;

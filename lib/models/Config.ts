@@ -31,6 +31,7 @@ export interface ApplicationQuestion {
   options?: string[];
   required: boolean;
   placeholder?: string;
+  maxWordCount?: number;
 }
 
 export interface ApplicationQuestionsConfig {

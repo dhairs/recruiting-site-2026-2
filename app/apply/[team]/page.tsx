@@ -23,6 +23,11 @@ function debounce<T extends (...args: Parameters<T>) => void>(
   };
 }
 
+// Word count helper
+function countWords(text: string): number {
+  return text.trim() === "" ? 0 : text.trim().split(/\s+/).length;
+}
+
 interface FormData {
   whyJoin: string;
   relevantExperience: string;
@@ -310,6 +315,29 @@ export default function TeamApplicationPage() {
       return;
     }
 
+    // Validate word counts
+    const overLimitFields: string[] = [];
+    commonQuestions.forEach((q) => {
+      if (q.maxWordCount) {
+        const value = (formData[q.id as keyof FormData] as string) || "";
+        if (countWords(value) > q.maxWordCount) {
+          overLimitFields.push(`${q.label} (max ${q.maxWordCount} words)`);
+        }
+      }
+    });
+    teamQuestions.forEach((q) => {
+      if (q.maxWordCount) {
+        const value = formData.teamQuestions[q.id] || "";
+        if (countWords(value) > q.maxWordCount) {
+          overLimitFields.push(`${q.label} (max ${q.maxWordCount} words)`);
+        }
+      }
+    });
+    if (overLimitFields.length > 0) {
+      setError(`The following fields exceed the word limit: ${overLimitFields.join(", ")}`);
+      return;
+    }
+
     setSubmitting(true);
     setError(null);
 
@@ -504,13 +532,12 @@ export default function TeamApplicationPage() {
                 return (
                   <label
                     key={option.value}
-                    className={`flex items-center gap-3 p-4 rounded-lg border cursor-pointer transition-all ${
-                      isSelected
+                    className={`flex items-center gap-3 p-4 rounded-lg border cursor-pointer transition-all ${isSelected
                         ? "bg-[#FFB526]/10 border-[#FFB526]/50 text-white"
                         : isDisabled
                           ? "bg-black/50 border-white/5 text-neutral-500 cursor-not-allowed"
                           : "bg-black border-white/10 text-neutral-300 hover:border-white/30"
-                    }`}
+                      }`}
                   >
                     <input
                       type="checkbox"
@@ -564,23 +591,41 @@ export default function TeamApplicationPage() {
                       ))}
                     </select>
                   ) : question.type === "text" ? (
-                    <input
-                      type="text"
-                      name={question.id}
-                      value={formData[question.id as keyof FormData] as string}
-                      onChange={handleChange}
-                      placeholder={question.placeholder}
-                      className="w-full px-4 py-3 rounded-lg bg-black border border-white/10 text-white placeholder-neutral-500 focus:border-[#FFB526] focus:outline-none transition-colors"
-                    />
+                    <>
+                      <input
+                        type="text"
+                        name={question.id}
+                        value={formData[question.id as keyof FormData] as string}
+                        onChange={handleChange}
+                        placeholder={question.placeholder}
+                        className="w-full px-4 py-3 rounded-lg bg-black border border-white/10 text-white placeholder-neutral-500 focus:border-[#FFB526] focus:outline-none transition-colors"
+                      />
+                      {question.maxWordCount && (
+                        <p className={`text-xs mt-1 text-right ${countWords((formData[question.id as keyof FormData] as string) || "") > question.maxWordCount
+                            ? "text-red-400" : "text-neutral-500"
+                          }`}>
+                          {countWords((formData[question.id as keyof FormData] as string) || "")} / {question.maxWordCount} words
+                        </p>
+                      )}
+                    </>
                   ) : (
-                    <textarea
-                      name={question.id}
-                      value={formData[question.id as keyof FormData] as string}
-                      onChange={handleChange}
-                      placeholder={question.placeholder}
-                      rows={4}
-                      className="w-full px-4 py-3 rounded-lg bg-black border border-white/10 text-white placeholder-neutral-500 focus:border-[#FFB526] focus:outline-none transition-colors resize-none"
-                    />
+                    <>
+                      <textarea
+                        name={question.id}
+                        value={formData[question.id as keyof FormData] as string}
+                        onChange={handleChange}
+                        placeholder={question.placeholder}
+                        rows={4}
+                        className="w-full px-4 py-3 rounded-lg bg-black border border-white/10 text-white placeholder-neutral-500 focus:border-[#FFB526] focus:outline-none transition-colors resize-none"
+                      />
+                      {question.maxWordCount && (
+                        <p className={`text-xs mt-1 text-right ${countWords((formData[question.id as keyof FormData] as string) || "") > question.maxWordCount
+                            ? "text-red-400" : "text-neutral-500"
+                          }`}>
+                          {countWords((formData[question.id as keyof FormData] as string) || "")} / {question.maxWordCount} words
+                        </p>
+                      )}
+                    </>
                   )}
                 </div>
               ))}
@@ -618,15 +663,24 @@ export default function TeamApplicationPage() {
                         ))}
                       </select>
                     ) : (
-                      <textarea
-                        value={formData.teamQuestions[question.id] || ""}
-                        onChange={(e) =>
-                          handleTeamQuestionChange(question.id, e.target.value)
-                        }
-                        placeholder={question.placeholder}
-                        rows={4}
-                        className="w-full px-4 py-3 rounded-lg bg-black border border-white/10 text-white placeholder-neutral-500 focus:border-red-500 focus:outline-none transition-colors resize-none"
-                      />
+                      <>
+                        <textarea
+                          value={formData.teamQuestions[question.id] || ""}
+                          onChange={(e) =>
+                            handleTeamQuestionChange(question.id, e.target.value)
+                          }
+                          placeholder={question.placeholder}
+                          rows={4}
+                          className="w-full px-4 py-3 rounded-lg bg-black border border-white/10 text-white placeholder-neutral-500 focus:border-red-500 focus:outline-none transition-colors resize-none"
+                        />
+                        {question.maxWordCount && (
+                          <p className={`text-xs mt-1 text-right ${countWords(formData.teamQuestions[question.id] || "") > question.maxWordCount
+                              ? "text-red-400" : "text-neutral-500"
+                            }`}>
+                            {countWords(formData.teamQuestions[question.id] || "")} / {question.maxWordCount} words
+                          </p>
+                        )}
+                      </>
                     )}
                   </div>
                 ))}

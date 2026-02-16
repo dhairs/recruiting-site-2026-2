@@ -35,7 +35,7 @@ export function QuestionsTab({ userData }: QuestionsTabProps) {
       if (!res.ok) throw new Error("Failed to fetch questions");
       const data = await res.json();
       setConfig(data.config);
-      
+
       // Set default expanded sections based on role
       const defaultExpanded: Record<string, boolean> = { common: isAdmin };
       if (isTeamCaptain && userTeam) {
@@ -71,13 +71,13 @@ export function QuestionsTab({ userData }: QuestionsTabProps) {
     key: string,
     index: number,
     field: keyof ApplicationQuestion,
-    value: string | boolean | string[]
+    value: string | boolean | string[] | number | undefined
   ) => {
     if (!config) return;
 
     setConfig(prev => {
       if (!prev) return prev;
-      
+
       if (scope === "common") {
         const newQuestions = [...prev.commonQuestions];
         newQuestions[index] = { ...newQuestions[index], [field]: value };
@@ -109,7 +109,7 @@ export function QuestionsTab({ userData }: QuestionsTabProps) {
 
     setConfig(prev => {
       if (!prev) return prev;
-      
+
       if (scope === "common") {
         return { ...prev, commonQuestions: [...prev.commonQuestions, newQuestion] };
       } else if (scope === "team" && key) {
@@ -130,7 +130,7 @@ export function QuestionsTab({ userData }: QuestionsTabProps) {
 
     setConfig(prev => {
       if (!prev) return prev;
-      
+
       if (scope === "common") {
         const newQuestions = prev.commonQuestions.filter((_, i) => i !== index);
         return { ...prev, commonQuestions: newQuestions };
@@ -251,6 +251,21 @@ export function QuestionsTab({ userData }: QuestionsTabProps) {
               </label>
             </div>
           </div>
+
+          {(question.type === "text" || question.type === "textarea") && (
+            <div>
+              <label className="text-xs text-neutral-400 mb-1 block">Max Word Count (optional)</label>
+              <input
+                type="number"
+                min={1}
+                value={question.maxWordCount || ""}
+                onChange={(e) => updateQuestion(scope, key, index, "maxWordCount", e.target.value ? parseInt(e.target.value) : undefined)}
+                disabled={!canEdit}
+                className="w-full bg-neutral-900 border border-white/10 rounded px-3 py-2 text-sm disabled:opacity-50"
+                placeholder="No limit"
+              />
+            </div>
+          )}
 
           {question.type === "select" && (
             <div>
@@ -410,7 +425,7 @@ export function QuestionsTab({ userData }: QuestionsTabProps) {
           const questions = config.teamQuestions[team] || [];
           // Only show if admin, or if it's the user's team, or if it has questions
           if (!isAdmin && team !== userTeam && questions.length === 0) return null;
-          
+
           return (
             <div key={team}>
               {renderSection(
@@ -432,7 +447,7 @@ export function QuestionsTab({ userData }: QuestionsTabProps) {
           <h3 className="text-lg font-medium text-neutral-300">System-Specific Questions</h3>
           {Object.entries(config.systemQuestions).map(([system, questions]) => {
             if (!isAdmin && system !== userSystem && questions.length === 0) return null;
-            
+
             return (
               <div key={system}>
                 {renderSection(
