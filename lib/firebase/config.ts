@@ -77,7 +77,7 @@ export async function getApplicationQuestions(): Promise<ApplicationQuestionsCon
     return {
       commonQuestions: data?.commonQuestions || [],
       teamQuestions: data?.teamQuestions || {},
-      systemQuestions: data?.systemQuestions,
+      systemQuestions: data?.systemQuestions || {},
       updatedAt: data?.updatedAt?.toDate() || new Date(),
       updatedBy: data?.updatedBy || "system",
     };
@@ -106,14 +106,39 @@ export function getDefaultApplicationQuestions(): ApplicationQuestionsConfig {
 }
 
 /**
+ * Strip undefined values from an object (Firestore does not accept undefined)
+ */
+function stripUndefined<T extends Record<string, unknown>>(obj: T): T {
+  return JSON.parse(JSON.stringify(obj));
+}
+
+/**
+ * Clean question arrays by removing undefined fields
+ */
+function cleanQuestions(questions: ApplicationQuestion[]): ApplicationQuestion[] {
+  return questions.map(q => stripUndefined(q as unknown as Record<string, unknown>) as unknown as ApplicationQuestion);
+}
+
+/**
  * Update the entire application questions config (admin only)
  */
 export async function updateApplicationQuestions(
   config: Omit<ApplicationQuestionsConfig, "updatedAt" | "updatedBy">,
   adminId: string
 ): Promise<void> {
+  const cleanedConfig = {
+    commonQuestions: cleanQuestions(config.commonQuestions),
+    teamQuestions: Object.fromEntries(
+      Object.entries(config.teamQuestions).map(([k, v]) => [k, cleanQuestions(v)])
+    ),
+    systemQuestions: config.systemQuestions
+      ? Object.fromEntries(
+        Object.entries(config.systemQuestions).map(([k, v]) => [k, cleanQuestions(v)])
+      )
+      : {},
+  };
   await adminDb.collection(CONFIG_COLLECTION).doc(QUESTIONS_DOC).set({
-    ...config,
+    ...cleanedConfig,
     updatedAt: new Date(),
     updatedBy: adminId,
   });
@@ -129,15 +154,16 @@ export async function updateTeamQuestions(
 ): Promise<void> {
   const currentConfig = await getApplicationQuestions();
 
-  await adminDb.collection(CONFIG_COLLECTION).doc(QUESTIONS_DOC).set({
+  const data = stripUndefined({
     ...currentConfig,
     teamQuestions: {
       ...currentConfig.teamQuestions,
-      [team]: questions,
+      [team]: cleanQuestions(questions),
     },
     updatedAt: new Date(),
     updatedBy: adminId,
-  });
+  } as unknown as Record<string, unknown>);
+  await adminDb.collection(CONFIG_COLLECTION).doc(QUESTIONS_DOC).set(data);
 }
 
 /**
@@ -149,12 +175,13 @@ export async function updateCommonQuestions(
 ): Promise<void> {
   const currentConfig = await getApplicationQuestions();
 
-  await adminDb.collection(CONFIG_COLLECTION).doc(QUESTIONS_DOC).set({
+  const data = stripUndefined({
     ...currentConfig,
-    commonQuestions: questions,
+    commonQuestions: cleanQuestions(questions),
     updatedAt: new Date(),
     updatedBy: adminId,
-  });
+  } as unknown as Record<string, unknown>);
+  await adminDb.collection(CONFIG_COLLECTION).doc(QUESTIONS_DOC).set(data);
 }
 
 /**
@@ -167,15 +194,16 @@ export async function updateSystemQuestions(
 ): Promise<void> {
   const currentConfig = await getApplicationQuestions();
 
-  await adminDb.collection(CONFIG_COLLECTION).doc(QUESTIONS_DOC).set({
+  const data = stripUndefined({
     ...currentConfig,
     systemQuestions: {
-      ...currentConfig.systemQuestions,
-      [system]: questions,
+      ...(currentConfig.systemQuestions || {}),
+      [system]: cleanQuestions(questions),
     },
     updatedAt: new Date(),
     updatedBy: adminId,
-  });
+  } as unknown as Record<string, unknown>);
+  await adminDb.collection(CONFIG_COLLECTION).doc(QUESTIONS_DOC).set(data);
 }
 
 // Team Descriptions Functions
